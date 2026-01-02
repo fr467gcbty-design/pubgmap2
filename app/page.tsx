@@ -628,7 +628,7 @@ export default function Page() {
     <div className="pubg-shell">
       <header className="pubg-topbar">
         <div className="pubg-tabs">
-          <div className="pubg-tab">경로 계획</div>
+          <div className="pubg-tab">배그 낙하산 도우미</div>
         </div>
       </header>
 
@@ -638,7 +638,7 @@ export default function Page() {
 
       <div className="pubg-body">
         <aside className="pubg-side">
-          <div className="pubg-side-title">경로 계획</div>
+          <div className="pubg-side-title"></div>
 
           <div className="pubg-field">
             <span className="pubg-label">맵 선택</span>
@@ -743,7 +743,7 @@ export default function Page() {
               <div className="pubg-right-note">
                 
             
-                전체화면 후 낙하 지점에 커서 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
+                전체화면 후 낙하 지점에 커서를 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
               </div>
 
               <input
