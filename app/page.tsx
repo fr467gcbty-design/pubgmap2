@@ -48,7 +48,6 @@ function intersectSegmentCircle(A: Point, B: Point, C: Point, r: number): PointT
   return pts;
 }
 
-/** 선분 A->B에서 원(C,r) 내부에 해당하는 t구간 [tIn, tOut] 반환 */
 function segmentInsideCircleInterval(A: Point, B: Point, C: Point, r: number): { tIn: number; tOut: number } | null {
   const eps = 1e-6;
   const r2 = r * r;
@@ -70,10 +69,6 @@ function segmentInsideCircleInterval(A: Point, B: Point, C: Point, r: number): {
   return null;
 }
 
-/**
- * 원(C,r) 내부 구간에서 A->B 진행 중 "가장 빠른 육지(마스크 기준)" 지점 찾기
- * - 원 진입점이 물이면, 원 내부를 따라가며 최초 육지로 바뀌는 지점 반환
- */
 function earliestLandPointWithinCircle(
   A: Point,
   B: Point,
@@ -95,7 +90,6 @@ function earliestLandPointWithinCircle(
   const dy = B.y - A.y;
   const segLen = Math.sqrt(dx * dx + dy * dy) || 1;
 
-  // 약 2px 간격 스캔
   const dt = 2 / segLen;
 
   let prevT = tIn;
@@ -107,7 +101,6 @@ function earliestLandPointWithinCircle(
     const land = isLand(p);
 
     if (!prevLand && land) {
-      // 물(prevT) -> 육지(tt) 경계 정밀화(이진탐색)
       let lo = prevT;
       let hi = tt;
       for (let i = 0; i < 14; i++) {
@@ -128,7 +121,6 @@ function earliestLandPointWithinCircle(
   return null;
 }
 
-// ✅ 점(테두리 없음)
 function drawDot(ctx: CanvasRenderingContext2D, p: Point, fill: string, radius: number) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
@@ -136,7 +128,6 @@ function drawDot(ctx: CanvasRenderingContext2D, p: Point, fill: string, radius: 
   ctx.fill();
 }
 
-// ✅ 화살표(빨간색, 테두리 없음)
 function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, color = "rgba(255,80,80,0.95)") {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -149,13 +140,11 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, color 
   ctx.lineWidth = 2.2;
   ctx.setLineDash([]);
 
-  // 직선
   ctx.beginPath();
   ctx.moveTo(from.x, from.y);
   ctx.lineTo(to.x, to.y);
   ctx.stroke();
 
-  // 화살촉
   const angle = Math.atan2(dy, dx);
   const headLen = 12;
   const headAngle = Math.PI / 7;
@@ -175,7 +164,6 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, color 
   ctx.restore();
 }
 
-// ===== 맵 정의 =====
 const MAPS = [
   { id: "erangel", label: "에란겔", file: "/maps/erangel.png", sizeKm: 8 },
   { id: "miramar", label: "미라마", file: "/maps/miramar.png", sizeKm: 8 },
@@ -183,7 +171,6 @@ const MAPS = [
   { id: "deston", label: "데스턴", file: "/maps/deston.png", sizeKm: 8 },
   { id: "vikendi", label: "비켄디", file: "/maps/vikendi.png", sizeKm: 8 },
   { id: "rondo", label: "론도", file: "/maps/rondo.png", sizeKm: 8 },
-
   { id: "sanhok", label: "사녹", file: "/maps/sanhok.png", sizeKm: 4 },
   { id: "paramo", label: "파라모", file: "/maps/paramo.png", sizeKm: 3 },
   { id: "karakin", label: "카라킨", file: "/maps/karakin.png", sizeKm: 2 },
@@ -191,16 +178,11 @@ const MAPS = [
 
 type MapId = (typeof MAPS)[number]["id"];
 
-// 반경 옵션: 50m~1250m (50m 단위)
 const RADIUS_OPTIONS_M: number[] = Array.from({ length: 25 }, (_, i) => (i + 1) * 50);
 
-// localStorage 키
-const maskKey = (mapId: string) => `pubg_mask_v1_${mapId}`;
-
-/** 마스크에서 육지 판정: alpha > 10 */
-function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, W: number, H: number) {
+function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: boolean, W: number, H: number) {
   return (p: Point): boolean => {
-    if (!maskCtx) return true;
+    if (!maskCtx || !hasMask) return true;
     const x = Math.round(clamp(p.x, 0, W - 1));
     const y = Math.round(clamp(p.y, 0, H - 1));
     const a = maskCtx.getImageData(x, y, 1, 1).data[3];
@@ -208,26 +190,13 @@ function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, W: number,
   };
 }
 
-/** RGB(0~255) -> HSV (h:0~1, s:0~1, v:0~1) */
-function rgbToHsv(r: number, g: number, b: number) {
-  const rr = r / 255,
-    gg = g / 255,
-    bb = b / 255;
-  const max = Math.max(rr, gg, bb);
-  const min = Math.min(rr, gg, bb);
-  const d = max - min;
-
-  let h = 0;
-  if (d !== 0) {
-    if (max === rr) h = ((gg - bb) / d) % 6;
-    else if (max === gg) h = (bb - rr) / d + 2;
-    else h = (rr - gg) / d + 4;
-    h /= 6;
-    if (h < 0) h += 1;
-  }
-  const s = max === 0 ? 0 : d / max;
-  const v = max;
-  return { h, s, v };
+function toGridLabel(p: Point, mapSizeKm: number, CANVAS: number) {
+  const n = Math.round(mapSizeKm);
+  const cell = CANVAS / n;
+  const col = clamp(Math.floor(p.x / cell), 0, n - 1);
+  const row = clamp(Math.floor(p.y / cell), 0, n - 1);
+  const letter = String.fromCharCode("A".charCodeAt(0) + col);
+  return `${letter}${row + 1}`;
 }
 
 export default function Page() {
@@ -236,48 +205,78 @@ export default function Page() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // 지도 픽셀 읽기용 오프스크린
-  const mapSampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const mapSampleCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  // ✅ 예전 방식: fullscreen은 "맵 래퍼"에 걸고, 화면 min(w,h)에 맞춰 크게 확대
+  const fsRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
 
-  // 마스크용 오프스크린
+  const [mouseCanvas, setMouseCanvas] = useState<Point | null>(null);
+
+  // 마스크(기능 유지)
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const [hasMask, setHasMask] = useState(false);
+  const [showMask, setShowMask] = useState(false);
+  const [editMask, setEditMask] = useState(false);
+  const BRUSH_PX = 18;
 
-  // 브러시 상태
   const drawingRef = useRef(false);
   const lastPtRef = useRef<Point | null>(null);
 
-  // 0: Start, 1: End, 2: Target
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [start, setStart] = useState<Point | null>(null);
   const [end, setEnd] = useState<Point | null>(null);
   const [target, setTarget] = useState<Point | null>(null);
 
-  const [mapId, setMapId] = useState<MapId>("erangel");
+  const [mapId, setMapId] = useState<MapId>("sanhok");
   const [imgError, setImgError] = useState<string | null>(null);
-
-  // 반경
   const [radiusM, setRadiusM] = useState<number>(700);
-
-  // 마스크 편집/보기/브러시
-  const [editMask, setEditMask] = useState(false);
-  const [showMask, setShowMask] = useState(true);
-  const [brushPx, setBrushPx] = useState(18);
-
-  // 자동생성 기준(파란색=물)
-  const AUTO_H_MIN = 0.45;
-  const AUTO_H_MAX = 0.72;
-  const AUTO_S_MIN = 0.22;
-  const AUTO_V_MIN = 0.12;
 
   const mapInfo = useMemo(() => MAPS.find((m) => m.id === mapId)!, [mapId]);
 
-  // 스케일
   const metersPerPixel = useMemo(() => (mapInfo.sizeKm * 1000) / CANVAS, [mapInfo.sizeKm]);
   const radiusPx = useMemo(() => radiusM / metersPerPixel, [radiusM, metersPerPixel]);
 
-  const ensureCanvases = () => {
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+
+    document.addEventListener("fullscreenchange", onFsChange);
+    window.addEventListener("resize", onResize);
+    onResize();
+
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  const enterFullscreen = async () => {
+    if (!fsRef.current) return;
+    try {
+      await fsRef.current.requestFullscreen();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const exitFullscreen = async () => {
+    if (!document.fullscreenElement) return;
+    try {
+      await document.exitFullscreen();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // ✅ 예전 버전 크기: 화면의 min(w,h) - 24
+  const displaySize = useMemo(() => {
+    if (!isFullscreen) return 900;
+    const m = Math.min(viewport.w, viewport.h);
+    return Math.max(200, Math.floor(m - 24));
+  }, [isFullscreen, viewport.w, viewport.h]);
+
+  const ensureMaskCanvas = () => {
     if (!maskCanvasRef.current || !maskCtxRef.current) {
       const mc = document.createElement("canvas");
       mc.width = CANVAS;
@@ -286,65 +285,12 @@ export default function Page() {
       maskCtxRef.current = mc.getContext("2d", { willReadFrequently: true });
       maskCtxRef.current?.clearRect(0, 0, CANVAS, CANVAS);
     }
-    if (!mapSampleCanvasRef.current || !mapSampleCtxRef.current) {
-      const sc = document.createElement("canvas");
-      sc.width = CANVAS;
-      sc.height = CANVAS;
-      mapSampleCanvasRef.current = sc;
-      mapSampleCtxRef.current = sc.getContext("2d", { willReadFrequently: true });
-    }
   };
 
-  const saveMaskToLocal = () => {
-    ensureCanvases();
-    const mc = maskCanvasRef.current;
-    if (!mc) return;
-    try {
-      localStorage.setItem(maskKey(mapId), mc.toDataURL("image/png"));
-    } catch {
-      alert("마스크 저장 실패(브라우저 용량 제한). PNG 내보내기를 사용해줘.");
-    }
-  };
-
-  const loadMaskFromLocal = () => {
-    ensureCanvases();
-    const mctx = maskCtxRef.current;
-    if (!mctx) return;
-
-    mctx.clearRect(0, 0, CANVAS, CANVAS);
-
-    const dataURL = localStorage.getItem(maskKey(mapId));
-    if (!dataURL) return;
-
-    const img = new Image();
-    img.onload = () => {
-      mctx.clearRect(0, 0, CANVAS, CANVAS);
-      mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
-      redraw();
-    };
-    img.src = dataURL;
-  };
-
-  const clearMask = () => {
-    ensureCanvases();
-    maskCtxRef.current?.clearRect(0, 0, CANVAS, CANVAS);
-    saveMaskToLocal();
-    redraw();
-  };
-
-  const exportMaskPNG = () => {
-    ensureCanvases();
-    const mc = maskCanvasRef.current;
-    if (!mc) return;
-
-    const link = document.createElement("a");
-    link.download = `${mapId}_mask.png`;
-    link.href = mc.toDataURL("image/png");
-    link.click();
-  };
-
+  // 마스크 PNG 가져오기
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const importMaskPNG = async (file: File) => {
-    ensureCanvases();
+    ensureMaskCanvas();
     const mctx = maskCtxRef.current;
     if (!mctx) return;
 
@@ -354,61 +300,21 @@ export default function Page() {
       mctx.clearRect(0, 0, CANVAS, CANVAS);
       mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
       URL.revokeObjectURL(url);
-      saveMaskToLocal();
+      setHasMask(true);
       redraw();
     };
     img.src = url;
   };
 
-  // 자동 마스크 생성: 파란색=물(투명), 나머지 육지(불투명 흰색)
-  const autoGenerateMaskFromMap = () => {
-    ensureCanvases();
-    const img = imgRef.current;
-    const sctx = mapSampleCtxRef.current;
-    const mctx = maskCtxRef.current;
-
-    if (!img || !sctx || !mctx) {
-      alert("맵 이미지가 아직 로드되지 않았어요.");
-      return;
-    }
-
-    sctx.clearRect(0, 0, CANVAS, CANVAS);
-    sctx.drawImage(img, 0, 0, CANVAS, CANVAS);
-    const mapData = sctx.getImageData(0, 0, CANVAS, CANVAS).data;
-
-    const mask = new ImageData(CANVAS, CANVAS);
-    const md = mask.data;
-
-    for (let i = 0; i < mapData.length; i += 4) {
-      const r = mapData[i],
-        g = mapData[i + 1],
-        b = mapData[i + 2];
-
-      const { h, s, v } = rgbToHsv(r, g, b);
-      const isWater = h >= AUTO_H_MIN && h <= AUTO_H_MAX && s >= AUTO_S_MIN && v >= AUTO_V_MIN;
-
-      md[i] = 255;
-      md[i + 1] = 255;
-      md[i + 2] = 255;
-      md[i + 3] = isWater ? 0 : 255;
-    }
-
-    mctx.clearRect(0, 0, CANVAS, CANVAS);
-    mctx.putImageData(mask, 0, 0);
-
-    saveMaskToLocal();
-    redraw();
-  };
-
   const brushStroke = (from: Point, to: Point, erase: boolean) => {
-    ensureCanvases();
+    ensureMaskCanvas();
     const mctx = maskCtxRef.current;
     if (!mctx) return;
 
     mctx.save();
     mctx.lineCap = "round";
     mctx.lineJoin = "round";
-    mctx.lineWidth = brushPx;
+    mctx.lineWidth = BRUSH_PX;
 
     if (erase) {
       mctx.globalCompositeOperation = "destination-out";
@@ -423,6 +329,8 @@ export default function Page() {
     mctx.lineTo(to.x, to.y);
     mctx.stroke();
     mctx.restore();
+
+    if (!hasMask) setHasMask(true);
   };
 
   const redraw = () => {
@@ -433,7 +341,6 @@ export default function Page() {
 
     ctx.clearRect(0, 0, CANVAS, CANVAS);
 
-    // 지도
     const img = imgRef.current;
     if (img) ctx.drawImage(img, 0, 0, CANVAS, CANVAS);
     else {
@@ -441,32 +348,28 @@ export default function Page() {
       ctx.fillRect(0, 0, CANVAS, CANVAS);
     }
 
-    // 마스크 오버레이(보기용)
-    if (showMask && maskCanvasRef.current) {
+    if (showMask && hasMask && maskCanvasRef.current) {
       ctx.save();
       ctx.globalAlpha = editMask ? 0.35 : 0.22;
       ctx.drawImage(maskCanvasRef.current, 0, 0);
       ctx.restore();
     }
 
-    // drop(낙하지점) 계산
     let drop: PointT | null = null;
     if (start && end && target) {
-      const isLand = makeIsLandFromMask(maskCtxRef.current, CANVAS, CANVAS);
+      const isLand = makeIsLandFromMask(maskCtxRef.current, hasMask, CANVAS, CANVAS);
       drop = earliestLandPointWithinCircle(start, end, target, radiusPx, isLand);
     }
 
-    // 비행기 경로: 흰색 + 항상 희미하게
     if (start && end) {
-      ctx.strokeStyle = "rgba(255,255,255,0.35)";
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 4;
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
       ctx.lineTo(end.x, end.y);
       ctx.stroke();
 
-      // 진행 방향 표시도 희미하게
       const pA = pointAt(start, end, 0.85);
       const pB = pointAt(start, end, 0.92);
       ctx.strokeStyle = "rgba(255,255,255,0.30)";
@@ -477,7 +380,6 @@ export default function Page() {
       ctx.stroke();
     }
 
-    // 반경 원: 검정색, 희미해짐 없음
     if (target) {
       ctx.strokeStyle = "rgba(0,0,0,0.95)";
       ctx.lineWidth = 3;
@@ -487,21 +389,11 @@ export default function Page() {
       ctx.stroke();
     }
 
-    // drop이 있으면: drop -> target 화살표(빨간색)
-    if (drop && target) {
-      drawArrow(ctx, { x: drop.x, y: drop.y }, target, "rgba(255,80,80,0.95)");
-    }
+    if (drop && target) drawArrow(ctx, { x: drop.x, y: drop.y }, target);
 
-    // drop 점(교차점): 테두리 없음
-    if (drop) {
-      drawDot(ctx, drop, "red", 5);
-    }
-
-    // Start/End 점
+    if (drop) drawDot(ctx, drop, "red", 5);
     if (start) drawDot(ctx, start, "red", 6);
     if (end) drawDot(ctx, end, "lime", 6);
-
-    // 도착지점(target) 점: 검정색, 테두리 없음
     if (target) drawDot(ctx, target, "black", 4);
   };
 
@@ -512,21 +404,20 @@ export default function Page() {
     return { x, y };
   };
 
-  // 마스크 편집
   const onCanvasMouseDown = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
     if (!editMask) return;
     drawingRef.current = true;
     const p = getCanvasPoint(evt);
     lastPtRef.current = p;
-
-    const erase = evt.shiftKey;
-    brushStroke(p, { x: p.x + 0.01, y: p.y + 0.01 }, erase);
+    brushStroke(p, { x: p.x + 0.01, y: p.y + 0.01 }, evt.shiftKey);
     redraw();
   };
 
   const onCanvasMouseMove = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
-    if (!editMask || !drawingRef.current) return;
     const p = getCanvasPoint(evt);
+    setMouseCanvas(p);
+
+    if (!editMask || !drawingRef.current) return;
     const last = lastPtRef.current;
     if (!last) {
       lastPtRef.current = p;
@@ -541,10 +432,8 @@ export default function Page() {
     if (!editMask) return;
     drawingRef.current = false;
     lastPtRef.current = null;
-    saveMaskToLocal();
   };
 
-  // 점 찍기(편집 모드가 아닐 때)
   const onCanvasClick = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
     if (editMask) return;
     const p = getCanvasPoint(evt);
@@ -565,16 +454,15 @@ export default function Page() {
     setStep(0);
   };
 
-  const onStart = () => {
+  const onReset = () => {
     setStart(null);
     setEnd(null);
     setTarget(null);
     setStep(0);
   };
 
-  // 맵 로드 + 마스크 로드
   useEffect(() => {
-    ensureCanvases();
+    ensureMaskCanvas();
     setImgError(null);
     imgRef.current = null;
 
@@ -583,148 +471,229 @@ export default function Page() {
 
     img.onload = () => {
       imgRef.current = img;
-      loadMaskFromLocal();
       redraw();
     };
 
     img.onerror = () => {
       setImgError(
-        `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\n` +
-          `public/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
+        `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
       );
       imgRef.current = null;
       redraw();
     };
 
-    // 맵 바꾸면 점 초기화
-    setStart(null);
-    setEnd(null);
-    setTarget(null);
-    setStep(0);
+    onReset();
+
+    maskCtxRef.current?.clearRect(0, 0, CANVAS, CANVAS);
+    setHasMask(false);
+    setShowMask(false);
+    setEditMask(false);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInfo.file]);
 
-  // 상태 변화마다 redraw
   useEffect(() => {
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, target, mapId, radiusPx, editMask, showMask, brushPx]);
+  }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask]);
+
+  const hudText = useMemo(() => {
+    if (!mouseCanvas) return null;
+    const grid = toGridLabel(mouseCanvas, mapInfo.sizeKm, CANVAS);
+    const mx = Math.round(mouseCanvas.x * metersPerPixel);
+    const my = Math.round(mouseCanvas.y * metersPerPixel);
+    return { grid, mx, my };
+  }, [mouseCanvas, mapInfo.sizeKm, metersPerPixel]);
+
+  // Ctrl+M → ( , / . / V )
+  const maskChordRef = useRef<{ armed: boolean; expires: number }>({ armed: false, expires: 0 });
+  useEffect(() => {
+    const ARM_MS = 1500;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const key = e.key;
+      const lower = key.toLowerCase();
+      const isMod = e.ctrlKey || e.metaKey;
+
+      if (isMod && lower === "m") {
+        e.preventDefault();
+        maskChordRef.current.armed = true;
+        maskChordRef.current.expires = Date.now() + ARM_MS;
+        return;
+      }
+
+      if (maskChordRef.current.armed && Date.now() > maskChordRef.current.expires) {
+        maskChordRef.current.armed = false;
+      }
+      if (!maskChordRef.current.armed) return;
+
+      if (key === "," || key === "<") {
+        e.preventDefault();
+        setShowMask((v) => !v);
+        maskChordRef.current.armed = false;
+        return;
+      }
+
+      if (key === "." || key === ">") {
+        e.preventDefault();
+        setEditMask((v) => !v);
+        maskChordRef.current.armed = false;
+        return;
+      }
+
+      if (lower === "v") {
+        e.preventDefault();
+        importInputRef.current?.click();
+        maskChordRef.current.armed = false;
+        return;
+      }
+
+      maskChordRef.current.armed = false;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const stepText = step === 0 ? "시작점 선택" : step === 1 ? "끝점 선택" : "도착지점(원 중심) 선택";
 
   return (
-    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-        <button onClick={onStart} style={{ padding: "8px 14px", cursor: "pointer" }}>
-          시작
-        </button>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          맵
-          <select value={mapId} onChange={(e) => setMapId(e.target.value as MapId)} style={{ padding: "6px 10px" }}>
-            {MAPS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <span style={{ color: "#444" }}>
-          맵 크기:{" "}
-          <b>
-            {mapInfo.sizeKm}×{mapInfo.sizeKm}
-          </b>
-        </span>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          반경
-          <select value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))} style={{ padding: "6px 10px" }}>
-            {RADIUS_OPTIONS_M.map((m) => (
-              <option key={m} value={m}>
-                {m}m
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button onClick={autoGenerateMaskFromMap} style={{ padding: "6px 10px", cursor: "pointer" }}>
-          자동 생성(파란색=물)
-        </button>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" checked={editMask} onChange={(e) => setEditMask(e.target.checked)} />
-          마스크 편집(브러시)
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" checked={showMask} onChange={(e) => setShowMask(e.target.checked)} />
-          마스크 보기
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          브러시
-          <input type="range" min={6} max={60} value={brushPx} onChange={(e) => setBrushPx(Number(e.target.value))} />
-          <span style={{ color: "#555" }}>{brushPx}px</span>
-        </label>
-
-        <button onClick={clearMask} style={{ padding: "6px 10px", cursor: "pointer" }}>
-          마스크 초기화
-        </button>
-
-        <button onClick={exportMaskPNG} style={{ padding: "6px 10px", cursor: "pointer" }}>
-          마스크 PNG 내보내기
-        </button>
-
-        <label style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 8, cursor: "pointer" }}>
-          마스크 PNG 가져오기
-          <input
-            type="file"
-            accept="image/png"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) importMaskPNG(f);
-              e.currentTarget.value = "";
-            }}
-          />
-        </label>
-      </div>
-
-      <div style={{ marginBottom: 10, color: "#666" }}>
-        {editMask ? (
-          <>
-            편집 모드: <b>왼클릭=육지</b>, <b>Shift+왼클릭=물(지우기)</b>
-          </>
-        ) : (
-          <>점 찍기: 시작점 → 끝점 → 도착지점(원 중심) 순서로 클릭</>
-        )}
-      </div>
-
-      {imgError && (
-        <div style={{ whiteSpace: "pre-wrap", color: "#c00", marginBottom: 10 }}>
-          {imgError}
+    <div className="pubg-shell">
+      <header className="pubg-topbar">
+        <div className="pubg-tabs">
+          {/* ✅ “설정” 제거 */}
+          <div className="pubg-tab">경로 계획</div>
         </div>
-      )}
+      </header>
 
-      <canvas
-        ref={canvasRef}
-        width={CANVAS}
-        height={CANVAS}
-        onClick={onCanvasClick}
-        onMouseDown={onCanvasMouseDown}
-        onMouseMove={onCanvasMouseMove}
-        onMouseUp={onCanvasMouseUp}
-        onMouseLeave={onCanvasMouseUp}
-        style={{
-          width: CANVAS,
-          height: CANVAS,
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          cursor: "crosshair",
-          display: "block",
-          userSelect: "none",
-        }}
-      />
+      {/* ✅ 우측 상단 전체화면 버튼(예전처럼) */}
+      <button className="pubg-fs-btn" onClick={isFullscreen ? exitFullscreen : enterFullscreen}>
+        {isFullscreen ? "전체화면 종료" : "전체화면"}
+      </button>
+
+      <div className="pubg-body">
+        <aside className="pubg-side">
+          <div className="pubg-side-title">경로 계획</div>
+
+          <div className="pubg-field">
+            <span className="pubg-label">맵 선택</span>
+            <select className="pubg-select" value={mapId} onChange={(e) => setMapId(e.target.value as MapId)}>
+              {MAPS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="pubg-field">
+            <span className="pubg-label">반경</span>
+            <select className="pubg-select" value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))}>
+              {RADIUS_OPTIONS_M.map((m) => (
+                <option key={m} value={m}>
+                  {m}m
+                </option>
+              ))}
+            </select>
+          </div>
+
+          
+
+          <div className="pubg-help">
+            현재 단계: <b style={{ color: "rgba(255,255,255,0.9)" }}>{stepText}</b>
+            <br />
+            {editMask ? <>마스크 편집 중 (Shift+드래그=지우기)</> : <></>}
+          </div>
+
+          {/* ✅ 시작 → 초기화 */}
+          <button className="pubg-primary" onClick={onReset}>
+            초기화
+          </button>
+
+          {imgError && (
+            <div style={{ marginTop: 12, whiteSpace: "pre-wrap", color: "#ff6b6b", fontSize: 12 }}>
+              {imgError}
+            </div>
+          )}
+        </aside>
+
+        <main className="pubg-main">
+          {/* ✅ fullscreen 대상: 이 래퍼(예전 방식) */}
+          <div
+            ref={fsRef}
+            style={{
+              width: isFullscreen ? "100vw" : "auto",
+              height: isFullscreen ? "100vh" : "auto",
+              display: "grid",
+              placeItems: "center",
+              background: isFullscreen ? "rgba(0,0,0,0.35)" : "transparent",
+            }}
+          >
+            <div
+              className="pubg-map-frame"
+              style={
+                isFullscreen
+                  ? {
+                      width: displaySize,
+                      height: displaySize,
+                      aspectRatio: "auto",
+                      borderRadius: 0,
+                      border: "none",
+                    }
+                  : undefined
+              }
+            >
+              <canvas
+                ref={canvasRef}
+                width={CANVAS}
+                height={CANVAS}
+                className="pubg-canvas"
+                onClick={onCanvasClick}
+                onMouseDown={onCanvasMouseDown}
+                onMouseMove={onCanvasMouseMove}
+                onMouseUp={onCanvasMouseUp}
+                onMouseLeave={() => {
+                  onCanvasMouseUp();
+                  setMouseCanvas(null);
+                }}
+                style={
+                  isFullscreen
+                    ? { width: displaySize, height: displaySize }
+                    : undefined
+                }
+              />
+
+              {hudText && (
+                <div className="pubg-hud">
+                  <span>{hudText.grid}</span>
+                  <span>x:{hudText.mx}m</span>
+                  <span>y:{hudText.my}m</span>
+                </div>
+              )}
+
+               {/* ✅ 우측 흰색 안내 문구 */}
+      <div className="pubg-right-note">
+        전체화면 후 낙하 지점에 커서 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
+      </div>
+
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="image/png"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importMaskPNG(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

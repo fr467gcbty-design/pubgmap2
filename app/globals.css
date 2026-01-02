@@ -1,26 +1,258 @@
-@import "tailwindcss";
+/* app/globals.css */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+}
+
+:root{
+  --top-h: 64px;
+  --side-w: 340px;
+  --panel-bg: rgba(14, 14, 16, 0.72);
+  --panel-brd: rgba(255,255,255,0.08);
+  --text: rgba(255,255,255,0.90);
+  --muted: rgba(255,255,255,0.55);
+  --gold: #d7b35c;
+}
+
+/* ✅ 배경: background.webp + 블러 */
+body{
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+  background: #0b0c10;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: url("/background.webp") center / cover no-repeat;
+  filter: blur(10px);
+  transform: scale(1.06);
+}
+
+body::after{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1200px 700px at 60% 20%, rgba(255,255,255,0.06), transparent 60%),
+    radial-gradient(900px 600px at 10% 80%, rgba(255,255,255,0.05), transparent 55%),
+    linear-gradient(180deg, rgba(10,10,12,0.40) 0%, rgba(10,10,12,0.78) 100%);
+}
+
+/* ===== layout ===== */
+.pubg-shell{
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: var(--top-h) 1fr;
+}
+
+.pubg-topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px;
+  background: rgba(10,10,12,0.55);
+  border-bottom: 1px solid var(--panel-brd);
+  backdrop-filter: blur(10px);
+}
+
+.pubg-tabs{
+  display: flex;
+  gap: 20px;
+}
+.pubg-tab{
+  height: var(--top-h);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  color: var(--gold);
+  border-bottom: 3px solid var(--gold);
+}
+
+.pubg-body{
+  position: relative;
+  min-height: calc(100vh - var(--top-h));
+  padding: 18px;
+  display: block;
+}
+
+.pubg-side{
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  width: var(--side-w);
+  max-height: calc(100% - 36px);
+  overflow: auto;
+  z-index: 20;
+
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-brd);
+  border-radius: 16px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+
+.pubg-side-title{
+  margin: 0 0 14px 0;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.pubg-field{ margin-bottom: 14px; }
+.pubg-label{
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* ✅ select styling + 옵션 글자 보이게 */
+.pubg-select{
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-brd);
+  background: rgba(255,255,255,0.10);
+  color: var(--text);
+  padding: 0 12px;
+  outline: none;
+}
+.pubg-select option{
+  background: #ffffff;
+  color: #111111;
+}
+
+.pubg-primary{
+  width: 100%;
+  height: 52px;
+  border-radius: 12px;
+  border: 1px solid rgba(215,179,92,0.55);
+  background: linear-gradient(180deg, rgba(215,179,92,0.95), rgba(168,132,52,0.95));
+  color: #16120a;
+  font-weight: 950;
+  cursor: pointer;
+}
+.pubg-primary:hover{ filter: brightness(1.03); }
+
+.pubg-help{
+  color: rgba(255,255,255,0.70);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 10px 0 16px;
+}
+
+.pubg-main{
+  width: 100%;
+  height: calc(100vh - var(--top-h) - 36px);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.pubg-map-frame{
+  width: min(900px, calc(100vw - 48px));
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #111;
+  border: 1px solid rgba(255,255,255,0.10);
+  position: relative;
+}
+
+.pubg-canvas{
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.pubg-hud{
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 14px;
+  border-radius: 8px;
+  user-select: none;
+  display: flex;
+  gap: 10px;
+}
+
+/* fullscreen toggle button */
+.pubg-fs-btn{
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2147483647;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.55);
+  color: rgba(255,255,255,0.92);
+  font-weight: 900;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+.pubg-fs-btn:hover{
+  background: rgba(0,0,0,0.65);
+}
+
+/* ✅ 우측 흰색 안내 문구 */
+.pubg-right-note{
+  position: fixed;
+  right: 16px;
+  top: 70px;
+  z-index: 2147483646;
+  max-width: 320px;
+  color: rgba(255,255,255,0.92);
+  font-size: 18px;
+  line-height: 1.45;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.85);
+  pointer-events: none; /* 클릭 방해 안 하게 */
+}
+
+@media (max-width: 980px){
+  .pubg-side{
+    position: static;
+    width: 100%;
+    max-height: none;
+    margin-bottom: 12px;
+  }
+  .pubg-main{
+    height: auto;
+    padding: 0;
+  }
+  .pubg-map-frame{
+    width: min(900px, calc(100vw - 36px));
+  }
+  .pubg-right-note{
+    display: none; /* 모바일에선 공간 좁아서 숨김 */
+  }
 }
