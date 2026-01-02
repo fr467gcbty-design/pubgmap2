@@ -164,6 +164,29 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, color 
   ctx.restore();
 }
 
+// 이미지 로더 (자동 마스크 적용용)
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.src = src;
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load: ${src}`));
+  });
+}
+
+// 마스크 알파가 실제로 있는지 검증(전부 255면 바다/육지 구분이 안 될 수 있음)
+function isValidAlphaMask(data: Uint8ClampedArray) {
+  let minA = 255,
+    maxA = 0;
+  for (let i = 3; i < data.length; i += 4) {
+    const a = data[i];
+    if (a < minA) minA = a;
+    if (a > maxA) maxA = a;
+    if (minA === 0 && maxA === 255) return true;
+  }
+  return minA !== maxA;
+}
+
 const MAPS = [
   { id: "erangel", label: "에란겔", file: "/maps/erangel.png", sizeKm: 8 },
   { id: "miramar", label: "미라마", file: "/maps/miramar.png", sizeKm: 8 },
@@ -205,14 +228,13 @@ export default function Page() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // ✅ 예전 방식: fullscreen은 "맵 래퍼"에 걸고, 화면 min(w,h)에 맞춰 크게 확대
   const fsRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
 
   const [mouseCanvas, setMouseCanvas] = useState<Point | null>(null);
 
-  // 마스크(기능 유지)
+  // 마스크
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const [hasMask, setHasMask] = useState(false);
@@ -247,6 +269,7 @@ export default function Page() {
 
     return () => {
       document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("resize", onResize as any);
       window.removeEventListener("resize", onResize);
     };
   }, []);
@@ -269,7 +292,6 @@ export default function Page() {
     }
   };
 
-  // ✅ 예전 버전 크기: 화면의 min(w,h) - 24
   const displaySize = useMemo(() => {
     if (!isFullscreen) return 900;
     const m = Math.min(viewport.w, viewport.h);
@@ -287,7 +309,36 @@ export default function Page() {
     }
   };
 
-  // 마스크 PNG 가져오기
+  // ✅ mapId에 맞춰 "/masks/<id>_mask.png" 자동 적용 (표시 메시지는 없음)
+  const autoApplyMaskForMap = async (mapIdForMask: MapId) => {
+    ensureMaskCanvas();
+    const mctx = maskCtxRef.current;
+    if (!mctx) return;
+
+    const maskFile = `/masks/${mapIdForMask}_mask.png`;
+
+    mctx.clearRect(0, 0, CANVAS, CANVAS);
+    setHasMask(false);
+
+    try {
+      const img = await loadImage(maskFile);
+      mctx.clearRect(0, 0, CANVAS, CANVAS);
+      mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
+
+      // 유효성 검증은 하되 UI로 표시하지 않음 (디버그는 콘솔)
+      const data = mctx.getImageData(0, 0, CANVAS, CANVAS).data;
+      const ok = isValidAlphaMask(data);
+      if (!ok) console.warn("Mask alpha may be invalid (no transparency):", maskFile);
+
+      setHasMask(true);
+    } catch (e) {
+      // 마스크 없으면 마스크 없이 동작 (isLand가 true로 처리)
+      setHasMask(false);
+      console.warn("Auto mask load failed:", maskFile, e);
+    }
+  };
+
+  // 마스크 PNG 수동 Import 유지
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importMaskPNG = async (file: File) => {
     ensureMaskCanvas();
@@ -461,7 +512,10 @@ export default function Page() {
     setStep(0);
   };
 
+  // 맵 바뀔 때: 지도 로드 + 마스크 자동 적용
   useEffect(() => {
+    let cancelled = false;
+
     ensureMaskCanvas();
     setImgError(null);
     imgRef.current = null;
@@ -470,11 +524,13 @@ export default function Page() {
     img.src = mapInfo.file;
 
     img.onload = () => {
+      if (cancelled) return;
       imgRef.current = img;
       redraw();
     };
 
     img.onerror = () => {
+      if (cancelled) return;
       setImgError(
         `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
       );
@@ -484,13 +540,21 @@ export default function Page() {
 
     onReset();
 
-    maskCtxRef.current?.clearRect(0, 0, CANVAS, CANVAS);
-    setHasMask(false);
+    // show/edit는 끄고, hasMask는 자동 적용 결과로 결정
     setShowMask(false);
     setEditMask(false);
 
+    (async () => {
+      await autoApplyMaskForMap(mapId);
+      if (cancelled) return;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapInfo.file]);
+  }, [mapInfo.file, mapId]);
 
   useEffect(() => {
     redraw();
@@ -558,18 +622,16 @@ export default function Page() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const stepText = step === 0 ? "시작점 선택" : step === 1 ? "끝점 선택" : "도착지점(원 중심) 선택";
+  const stepText = step === 0 ? "비행기 시작점 선택" : step === 1 ? "비행기 끝점 선택" : "도착지점 선택";
 
   return (
     <div className="pubg-shell">
       <header className="pubg-topbar">
         <div className="pubg-tabs">
-          {/* ✅ “설정” 제거 */}
           <div className="pubg-tab">경로 계획</div>
         </div>
       </header>
 
-      {/* ✅ 우측 상단 전체화면 버튼(예전처럼) */}
       <button className="pubg-fs-btn" onClick={isFullscreen ? exitFullscreen : enterFullscreen}>
         {isFullscreen ? "전체화면 종료" : "전체화면"}
       </button>
@@ -600,18 +662,27 @@ export default function Page() {
             </select>
           </div>
 
-          
-
           <div className="pubg-help">
             현재 단계: <b style={{ color: "rgba(255,255,255,0.9)" }}>{stepText}</b>
             <br />
             {editMask ? <>마스크 편집 중 (Shift+드래그=지우기)</> : <></>}
           </div>
 
-          {/* ✅ 시작 → 초기화 */}
           <button className="pubg-primary" onClick={onReset}>
             초기화
           </button>
+
+          <div
+  style={{
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 1.5,
+    color: "rgba(255,255,255,0.7)",
+    whiteSpace: "pre-line",
+  }}
+>
+  {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요`}
+</div>
 
           {imgError && (
             <div style={{ marginTop: 12, whiteSpace: "pre-wrap", color: "#ff6b6b", fontSize: 12 }}>
@@ -621,7 +692,6 @@ export default function Page() {
         </aside>
 
         <main className="pubg-main">
-          {/* ✅ fullscreen 대상: 이 래퍼(예전 방식) */}
           <div
             ref={fsRef}
             style={{
@@ -659,11 +729,7 @@ export default function Page() {
                   onCanvasMouseUp();
                   setMouseCanvas(null);
                 }}
-                style={
-                  isFullscreen
-                    ? { width: displaySize, height: displaySize }
-                    : undefined
-                }
+                style={isFullscreen ? { width: displaySize, height: displaySize } : undefined}
               />
 
               {hudText && (
@@ -674,10 +740,11 @@ export default function Page() {
                 </div>
               )}
 
-               {/* ✅ 우측 흰색 안내 문구 */}
-      <div className="pubg-right-note">
-        전체화면 후 낙하 지점에 커서 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
-      </div>
+              <div className="pubg-right-note">
+                
+            
+                전체화면 후 낙하 지점에 커서 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
+              </div>
 
               <input
                 ref={importInputRef}
