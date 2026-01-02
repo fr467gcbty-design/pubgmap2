@@ -532,7 +532,7 @@ export default function Page() {
     img.onerror = () => {
       if (cancelled) return;
       setImgError(
-        `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
+        `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인하시오.`
       );
       imgRef.current = null;
       redraw();
