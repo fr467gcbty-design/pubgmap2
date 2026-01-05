@@ -569,6 +569,8 @@ export default function Page() {
     return { grid, mx, my };
   }, [mouseCanvas, mapInfo.sizeKm, metersPerPixel]);
 
+  
+
   // Ctrl+M → ( , / . / V )
   const maskChordRef = useRef<{ armed: boolean; expires: number }>({ armed: false, expires: 0 });
   useEffect(() => {
@@ -577,6 +579,12 @@ export default function Page() {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === "Backquote") {
+  e.preventDefault();
+  onReset();
+  return;
+}
 
       const key = e.key;
       const lower = key.toLowerCase();
@@ -669,7 +677,7 @@ export default function Page() {
           </div>
 
           <button className="pubg-primary" onClick={onReset}>
-            초기화
+            초기화( 단축키: ~ )
           </button>
 
           <div
@@ -681,7 +689,8 @@ export default function Page() {
     whiteSpace: "pre-line",
   }}
 >
-  {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요`}
+  {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요
+ `}
 </div>
 
           {imgError && (
@@ -732,19 +741,17 @@ export default function Page() {
                 style={isFullscreen ? { width: displaySize, height: displaySize } : undefined}
               />
 
-              {hudText && (
-                <div className="pubg-hud">
-                  <span>{hudText.grid}</span>
-                  <span>x:{hudText.mx}m</span>
-                  <span>y:{hudText.my}m</span>
-                </div>
-              )}
+          
 
               <div className="pubg-right-note">
                 
             
                 전체화면 후 낙하 지점에 커서를 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
+                
+              
               </div>
+
+              
 
               <input
                 ref={importInputRef}
