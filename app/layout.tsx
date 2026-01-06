@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "낙하산 도우미",
+  title: "배그 낙하산 도우미",
   description: "비행기 경로와 도착지점을 찍어 낙하 지점을 계산합니다.",
 };
 
@@ -27,13 +27,17 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
 
-        {/* ✅ Flaticon 출처 표기 (공통 푸터) */}
-        <footer
+        {/* ✅ Flaticon 출처: 좌측 하단 고정 + 아주 작은 글씨 */}
+        <div
           style={{
-            padding: "12px 16px",
-            fontSize: 12,
-            opacity: 0.8,
-            textAlign: "center",
+            position: "fixed",
+            left: 8,
+            bottom: 8,
+            zIndex: 9999,
+            fontSize: "10px",
+            lineHeight: 1.2,
+            opacity: 0.55,
+            pointerEvents: "none", // 아래 UI 클릭 방해 최소화
           }}
         >
           <a
@@ -41,10 +45,14 @@ export default function RootLayout({
             title="낙하산 아이콘"
             target="_blank"
             rel="noreferrer"
+            style={{
+              pointerEvents: "auto", // 링크는 클릭 가능하게
+              textDecoration: "none",
+            }}
           >
-            낙하산 아이콘 제작자: Freepik - Flaticon
+            icons made by Freepik from Flaticon
           </a>
-        </footer>
+        </div>
       </body>
     </html>
   );
