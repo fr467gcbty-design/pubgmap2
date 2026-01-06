@@ -636,7 +636,7 @@ export default function Page() {
     <div className="pubg-shell">
       <header className="pubg-topbar">
         <div className="pubg-tabs">
-          <div className="pubg-tab">배그 낙하산 도우미</div>
+          <div className="pubg-tab">배틀그라운드 낙하산 도우미</div>
         </div>
       </header>
 
