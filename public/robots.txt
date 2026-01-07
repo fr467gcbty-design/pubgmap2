@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://www.pubgdrop.site/
+
+# Sitemaps
+Sitemap: https://www.pubgdrop.site/sitemap.xml
