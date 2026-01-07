@@ -50,7 +50,7 @@ export default function RootLayout({
               textDecoration: "none",
             }}
           >
-            icons made by Freepik from Flaticon
+            icons made by Freepik from Flaticon~
           </a>
         </div>
       </body>
