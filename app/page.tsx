@@ -213,12 +213,21 @@ function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: b
   };
 }
 
+type Calib = { s: number; dx: number; dy: number };
+const DEFAULT_CALIB: Calib = { s: 1, dx: 0, dy: 0 };
+
+const CALIB_PRESETS: Partial<Record<MapId, Calib>> = {
+  sanhok: { s: 1, dx: 4, dy: 5 },
+  // erangel: { s: 1.000, dx: 0, dy: 0 },
+  // miramar: { s: 1.000, dx: 0, dy: 0 },
+};
+
+const getPreset = (id: MapId): Calib => CALIB_PRESETS[id] ?? DEFAULT_CALIB;
+
 export default function Page() {
   const CANVAS = 900;
 
-  // ✅ 인게임처럼 “정사각형 한 변 = min(화면가로, 화면세로)”로 꽉 차게
-  // (16:9 환경에서는 사실상 화면 세로(=100vh) 꽉 차는 크기)
-  // 만약 어떤 브라우저에서 1~2px 잘림이 생기면 2 정도로만 올려줘.
+  // ✅ 전체화면에서 정사각형 한 변 = min(vw, vh)
   const FS_SAFE_PAD = 0;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -230,6 +239,10 @@ export default function Page() {
   // ✅ 브라우저/해상도 대응용 viewport (visualViewport 우선)
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const viewportSyncRef = useRef<() => void>(() => {});
+
+  // ✅ 보정(캘리브레이션)
+  const [calibMode, setCalibMode] = useState(false);
+  const [calib, setCalib] = useState<Calib>(DEFAULT_CALIB);
 
   // 마스크
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -255,6 +268,84 @@ export default function Page() {
 
   const metersPerPixel = useMemo(() => (mapInfo.sizeKm * 1000) / CANVAS, [mapInfo.sizeKm]);
   const radiusPx = useMemo(() => radiusM / metersPerPixel, [radiusM, metersPerPixel]);
+
+  // ✅ 맵별 보정값 저장/불러오기
+  useEffect(() => {
+    const key = `calib:${mapId}`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) setCalib(JSON.parse(saved));
+      else setCalib(DEFAULT_CALIB);
+    } catch {
+      setCalib(DEFAULT_CALIB);
+    }
+  }, [mapId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`calib:${mapId}`, JSON.stringify(calib));
+    } catch {}
+  }, [calib, mapId]);
+
+  // ✅ Ctrl+K → 보정 패널 토글
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCalibMode((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // ✅ 보정 행렬(렌더용) 계산
+  const getCalibTransform = () => {
+    const { s, dx, dy } = calib;
+    const cx = CANVAS / 2;
+    const cy = CANVAS / 2;
+    // center 기준 스케일 + 이동
+    const tx = (1 - s) * cx + dx;
+    const ty = (1 - s) * cy + dy;
+    return { s, tx, ty };
+  };
+
+  // ✅ 화면좌표(display: 0..CANVAS) -> 월드좌표(world: 보정 전 기준)
+  const toWorld = (pDisplay: Point): Point => {
+    const { s, tx, ty } = getCalibTransform();
+    return { x: (pDisplay.x - tx) / s, y: (pDisplay.y - ty) / s };
+  };
+
+  // ✅ 보정 적용해서 이미지/오버레이 그리기
+  const drawWithCalib = (ctx: CanvasRenderingContext2D, source: CanvasImageSource) => {
+    const { s, tx, ty } = getCalibTransform();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, CANVAS, CANVAS);
+    ctx.clip();
+
+    ctx.setTransform(s, 0, 0, s, tx, ty);
+    ctx.drawImage(source, 0, 0, CANVAS, CANVAS);
+
+    ctx.restore();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  const withCalibTransform = (ctx: CanvasRenderingContext2D, fn: () => void) => {
+    const { s, tx, ty } = getCalibTransform();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, CANVAS, CANVAS);
+    ctx.clip();
+    ctx.setTransform(s, 0, 0, s, tx, ty);
+    fn();
+    ctx.restore();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
 
   // ✅ viewport 동기화 (fullscreen 전환 직후 타이밍 이슈까지 대응)
   useEffect(() => {
@@ -306,12 +397,12 @@ export default function Page() {
     }
   };
 
-  // ✅ 인게임 느낌: “정사각형 한 변 = min(vw, vh)” (지금 오차 잡는 핵심)
+  // ✅ 전체화면 맵 표시 크기
   const displaySize = useMemo(() => {
     if (!isFullscreen) return CANVAS;
     const size = Math.min(viewport.w, viewport.h) - FS_SAFE_PAD * 2;
     return Math.max(200, Math.floor(size));
-  }, [isFullscreen, viewport.w, viewport.h, FS_SAFE_PAD]);
+  }, [isFullscreen, viewport.w, viewport.h]);
 
   const ensureMaskCanvas = () => {
     if (!maskCanvasRef.current || !maskCtxRef.current) {
@@ -337,6 +428,7 @@ export default function Page() {
     try {
       const img = await loadImage(maskFile);
       mctx.clearRect(0, 0, CANVAS, CANVAS);
+      // 마스크는 "월드 좌표(보정 전)" 기준으로 저장됨
       mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
 
       const data = mctx.getImageData(0, 0, CANVAS, CANVAS).data;
@@ -360,6 +452,7 @@ export default function Page() {
     const img = new Image();
     img.onload = () => {
       mctx.clearRect(0, 0, CANVAS, CANVAS);
+      // 마스크는 월드 좌표 기준으로 저장
       mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
       URL.revokeObjectURL(url);
       setHasMask(true);
@@ -368,7 +461,7 @@ export default function Page() {
     img.src = url;
   };
 
-  const brushStroke = (from: Point, to: Point, erase: boolean) => {
+  const brushStroke = (fromWorld: Point, toWorldPt: Point, erase: boolean) => {
     ensureMaskCanvas();
     const mctx = maskCtxRef.current;
     if (!mctx) return;
@@ -387,8 +480,8 @@ export default function Page() {
     }
 
     mctx.beginPath();
-    mctx.moveTo(from.x, from.y);
-    mctx.lineTo(to.x, to.y);
+    mctx.moveTo(fromWorld.x, fromWorld.y);
+    mctx.lineTo(toWorldPt.x, toWorldPt.y);
     mctx.stroke();
     mctx.restore();
 
@@ -401,89 +494,101 @@ export default function Page() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, CANVAS, CANVAS);
 
     const img = imgRef.current;
-    if (img) ctx.drawImage(img, 0, 0, CANVAS, CANVAS);
-    else {
+    if (img) {
+      // ✅ 지도 이미지는 보정 적용해서 그리기
+      drawWithCalib(ctx, img);
+    } else {
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, CANVAS, CANVAS);
     }
 
+    // ✅ 마스크 오버레이도 동일 보정으로 보이게
     if (showMask && hasMask && maskCanvasRef.current) {
       ctx.save();
       ctx.globalAlpha = editMask ? 0.35 : 0.22;
-      ctx.drawImage(maskCanvasRef.current, 0, 0);
+      drawWithCalib(ctx, maskCanvasRef.current);
       ctx.restore();
     }
 
+    // ✅ 계산은 "월드 좌표(보정 전)"로 진행
     let drop: PointT | null = null;
     if (start && end && target) {
       const isLand = makeIsLandFromMask(maskCtxRef.current, hasMask, CANVAS, CANVAS);
       drop = earliestLandPointWithinCircle(start, end, target, radiusPx, isLand);
     }
 
-    if (start && end) {
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 4;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
+    // ✅ 오버레이(선/원/화살표/점)도 보정 적용해서 지도 위에 정확히 올라가게
+    withCalibTransform(ctx, () => {
+      if (start && end) {
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = 4;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
 
-      const pA = pointAt(start, end, 0.85);
-      const pB = pointAt(start, end, 0.92);
-      ctx.strokeStyle = "rgba(255,255,255,0.30)";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(pA.x, pA.y);
-      ctx.lineTo(pB.x, pB.y);
-      ctx.stroke();
-    }
+        const pA = pointAt(start, end, 0.85);
+        const pB = pointAt(start, end, 0.92);
+        ctx.strokeStyle = "rgba(255,255,255,0.30)";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(pA.x, pA.y);
+        ctx.lineTo(pB.x, pB.y);
+        ctx.stroke();
+      }
 
-    if (target) {
-      ctx.strokeStyle = "rgba(0,0,0,0.95)";
-      ctx.lineWidth = 3;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(target.x, target.y, radiusPx, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+      if (target) {
+        ctx.strokeStyle = "rgba(0,0,0,0.95)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, radiusPx, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
-    if (drop && target) drawArrow(ctx, { x: drop.x, y: drop.y }, target);
+      if (drop && target) drawArrow(ctx, { x: drop.x, y: drop.y }, target);
 
-    if (drop) drawDot(ctx, drop, "red", 5);
-    if (start) drawDot(ctx, start, "red", 6);
-    if (end) drawDot(ctx, end, "lime", 6);
-    if (target) drawDot(ctx, target, "black", 4);
+      if (drop) drawDot(ctx, drop, "red", 5);
+      if (start) drawDot(ctx, start, "red", 6);
+      if (end) drawDot(ctx, end, "lime", 6);
+      if (target) drawDot(ctx, target, "black", 4);
+    });
   };
 
-  const getCanvasPoint = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Point => {
+  // ✅ 클릭/드래그는 "보정된 화면좌표" -> "월드좌표"로 역변환해서 저장
+  const getCanvasPointWorld = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Point => {
     const rect = evt.currentTarget.getBoundingClientRect();
-    const x = ((evt.clientX - rect.left) / rect.width) * CANVAS;
-    const y = ((evt.clientY - rect.top) / rect.height) * CANVAS;
-    return { x, y };
+    const xDisplay = ((evt.clientX - rect.left) / rect.width) * CANVAS;
+    const yDisplay = ((evt.clientY - rect.top) / rect.height) * CANVAS;
+    return toWorld({ x: xDisplay, y: yDisplay });
   };
 
   const onCanvasMouseDown = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
     if (!editMask) return;
     drawingRef.current = true;
-    const p = getCanvasPoint(evt);
+
+    const p = getCanvasPointWorld(evt);
     lastPtRef.current = p;
+
     brushStroke(p, { x: p.x + 0.01, y: p.y + 0.01 }, evt.shiftKey);
     redraw();
   };
 
   const onCanvasMouseMove = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
     if (!editMask || !drawingRef.current) return;
-    const p = getCanvasPoint(evt);
 
+    const p = getCanvasPointWorld(evt);
     const last = lastPtRef.current;
     if (!last) {
       lastPtRef.current = p;
       return;
     }
+
     brushStroke(last, p, evt.shiftKey);
     lastPtRef.current = p;
     redraw();
@@ -497,7 +602,7 @@ export default function Page() {
 
   const onCanvasClick = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
     if (editMask) return;
-    const p = getCanvasPoint(evt);
+    const p = getCanvasPointWorld(evt);
 
     if (step === 0) {
       setStart(p);
@@ -566,7 +671,6 @@ export default function Page() {
     };
 
     onReset();
-
     setShowMask(false);
     setEditMask(false);
 
@@ -581,10 +685,11 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInfo.file, mapId]);
 
+  // 상태 바뀔 때 redraw
   useEffect(() => {
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask]);
+  }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask, calib]);
 
   // Ctrl+M → ( , / . / V )
   const maskChordRef = useRef<{ armed: boolean; expires: number }>({ armed: false, expires: 0 });
@@ -681,6 +786,8 @@ export default function Page() {
             현재 단계: <b style={{ color: "rgba(255,255,255,0.9)" }}>{stepText}</b>
             <br />
             {editMask ? <>마스크 편집 중 (Shift+드래그=지우기)</> : <></>}
+            <br />
+            <span style={{ opacity: 0.8 }}>지도 보정 패널: Ctrl+K</span>
           </div>
 
           <button className="pubg-primary" onClick={onReset}>
@@ -697,7 +804,8 @@ export default function Page() {
             }}
           >
             {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요.
-초기화 단축키는 \` 입니다.`}
+초기화 단축키는 \` 입니다.
+마스크 단축키: Ctrl+M 후 ,(보기) / .(편집) / V(불러오기)`}
           </div>
 
           {imgError && (
@@ -767,7 +875,7 @@ export default function Page() {
                 onMouseMove={onCanvasMouseMove}
                 onMouseUp={onCanvasMouseUp}
                 onMouseLeave={onCanvasMouseUp}
-                style={isFullscreen ? { width: "100%", height: "100%", display: "block", imageRendering: "auto" as any } : undefined}
+                style={isFullscreen ? { width: "100%", height: "100%", display: "block" } : undefined}
               />
 
               <div className="pubg-right-note">
@@ -785,6 +893,80 @@ export default function Page() {
                   e.currentTarget.value = "";
                 }}
               />
+
+              {/* ✅ 보정 패널 (Ctrl+K) */}
+              {calibMode && (
+                <div
+                  style={{
+                    position: "fixed",
+                    right: 16,
+                    bottom: 16,
+                    zIndex: 2147483647,
+                    background: "rgba(0,0,0,0.70)",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    padding: 12,
+                    borderRadius: 12,
+                    width: 300,
+                    color: "rgba(255,255,255,0.92)",
+                    backdropFilter: "blur(10px)",
+                  }}
+                >
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>지도 보정 (Ctrl+K)</div>
+                  <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 8 }}>
+                    팁: 먼저 <b>Scale</b> 맞추고, 그 다음 <b>dx/dy</b>로 위치를 맞추면 쉬움
+                  </div>
+
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>Scale: {calib.s.toFixed(3)}</div>
+                  <input
+                    type="range"
+                    min="0.95"
+                    max="1.05"
+                    step="0.001"
+                    value={calib.s}
+                    onChange={(e) => setCalib((c) => ({ ...c, s: Number(e.target.value) }))}
+                    style={{ width: "100%" }}
+                  />
+
+                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>dx: {calib.dx.toFixed(0)}px</div>
+                  <input
+                    type="range"
+                    min="-80"
+                    max="80"
+                    step="1"
+                    value={calib.dx}
+                    onChange={(e) => setCalib((c) => ({ ...c, dx: Number(e.target.value) }))}
+                    style={{ width: "100%" }}
+                  />
+
+                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>dy: {calib.dy.toFixed(0)}px</div>
+                  <input
+                    type="range"
+                    min="-80"
+                    max="80"
+                    step="1"
+                    value={calib.dy}
+                    onChange={(e) => setCalib((c) => ({ ...c, dy: Number(e.target.value) }))}
+                    style={{ width: "100%" }}
+                  />
+
+                  <button
+                    onClick={() => setCalib(DEFAULT_CALIB)}
+                    style={{
+                      marginTop: 10,
+                      width: "100%",
+                      height: 36,
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: "rgba(255,255,255,0.08)",
+                      color: "rgba(255,255,255,0.92)",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    보정값 초기화
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </main>
