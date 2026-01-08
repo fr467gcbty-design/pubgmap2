@@ -9,6 +9,8 @@
 html,
 body {
   height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 :root{
@@ -19,6 +21,19 @@ body {
   --text: rgba(255,255,255,0.90);
   --muted: rgba(255,255,255,0.55);
   --gold: #d7b35c;
+}
+
+/* ✅ fullscreen 들어갈 때 브라우저가 주는 기본 여백/배경 개입 방지 */
+.pubg-fs-host:fullscreen{
+  margin: 0;
+  padding: 0;
+  background: #000;
+  overflow: hidden;
+}
+@supports (height: 100dvh){
+  .pubg-fs-host:fullscreen{
+    height: 100dvh;
+  }
 }
 
 /* ✅ 배경: background.webp + 블러 */

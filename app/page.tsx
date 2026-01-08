@@ -174,7 +174,7 @@ function loadImage(src: string) {
   });
 }
 
-// 마스크 알파가 실제로 있는지 검증(전부 255면 바다/육지 구분이 안 될 수 있음)
+// 마스크 알파가 실제로 있는지 검증
 function isValidAlphaMask(data: Uint8ClampedArray) {
   let minA = 255,
     maxA = 0;
@@ -213,26 +213,23 @@ function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: b
   };
 }
 
-function toGridLabel(p: Point, mapSizeKm: number, CANVAS: number) {
-  const n = Math.round(mapSizeKm);
-  const cell = CANVAS / n;
-  const col = clamp(Math.floor(p.x / cell), 0, n - 1);
-  const row = clamp(Math.floor(p.y / cell), 0, n - 1);
-  const letter = String.fromCharCode("A".charCodeAt(0) + col);
-  return `${letter}${row + 1}`;
-}
-
 export default function Page() {
   const CANVAS = 900;
+
+  // ✅ 인게임처럼 “정사각형 한 변 = min(화면가로, 화면세로)”로 꽉 차게
+  // (16:9 환경에서는 사실상 화면 세로(=100vh) 꽉 차는 크기)
+  // 만약 어떤 브라우저에서 1~2px 잘림이 생기면 2 정도로만 올려줘.
+  const FS_SAFE_PAD = 0;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   const fsRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewport, setViewport] = useState({ w: 0, h: 0 });
 
-  const [mouseCanvas, setMouseCanvas] = useState<Point | null>(null);
+  // ✅ 브라우저/해상도 대응용 viewport (visualViewport 우선)
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const viewportSyncRef = useRef<() => void>(() => {});
 
   // 마스크
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -259,18 +256,33 @@ export default function Page() {
   const metersPerPixel = useMemo(() => (mapInfo.sizeKm * 1000) / CANVAS, [mapInfo.sizeKm]);
   const radiusPx = useMemo(() => radiusM / metersPerPixel, [radiusM, metersPerPixel]);
 
+  // ✅ viewport 동기화 (fullscreen 전환 직후 타이밍 이슈까지 대응)
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    const syncViewport = () => {
+      const vv = window.visualViewport;
+      const w = Math.round(vv?.width ?? window.innerWidth);
+      const h = Math.round(vv?.height ?? window.innerHeight);
+      setViewport({ w, h });
+    };
+    viewportSyncRef.current = syncViewport;
+
+    const onFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      syncViewport();
+      requestAnimationFrame(syncViewport);
+      setTimeout(syncViewport, 60);
+    };
 
     document.addEventListener("fullscreenchange", onFsChange);
-    window.addEventListener("resize", onResize);
-    onResize();
+    window.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("resize", syncViewport);
+
+    syncViewport();
 
     return () => {
       document.removeEventListener("fullscreenchange", onFsChange);
-      document.removeEventListener("resize", onResize as any);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("resize", syncViewport);
     };
   }, []);
 
@@ -278,6 +290,8 @@ export default function Page() {
     if (!fsRef.current) return;
     try {
       await fsRef.current.requestFullscreen();
+      viewportSyncRef.current?.();
+      requestAnimationFrame(() => viewportSyncRef.current?.());
     } catch (e) {
       console.error(e);
     }
@@ -292,11 +306,12 @@ export default function Page() {
     }
   };
 
+  // ✅ 인게임 느낌: “정사각형 한 변 = min(vw, vh)” (지금 오차 잡는 핵심)
   const displaySize = useMemo(() => {
-    if (!isFullscreen) return 900;
-    const m = Math.min(viewport.w, viewport.h);
-    return Math.max(200, Math.floor(m - 24));
-  }, [isFullscreen, viewport.w, viewport.h]);
+    if (!isFullscreen) return CANVAS;
+    const size = Math.min(viewport.w, viewport.h) - FS_SAFE_PAD * 2;
+    return Math.max(200, Math.floor(size));
+  }, [isFullscreen, viewport.w, viewport.h, FS_SAFE_PAD]);
 
   const ensureMaskCanvas = () => {
     if (!maskCanvasRef.current || !maskCtxRef.current) {
@@ -309,7 +324,6 @@ export default function Page() {
     }
   };
 
-  // ✅ mapId에 맞춰 "/masks/<id>_mask.png" 자동 적용 (표시 메시지는 없음)
   const autoApplyMaskForMap = async (mapIdForMask: MapId) => {
     ensureMaskCanvas();
     const mctx = maskCtxRef.current;
@@ -325,20 +339,17 @@ export default function Page() {
       mctx.clearRect(0, 0, CANVAS, CANVAS);
       mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
 
-      // 유효성 검증은 하되 UI로 표시하지 않음 (디버그는 콘솔)
       const data = mctx.getImageData(0, 0, CANVAS, CANVAS).data;
       const ok = isValidAlphaMask(data);
       if (!ok) console.warn("Mask alpha may be invalid (no transparency):", maskFile);
 
       setHasMask(true);
     } catch (e) {
-      // 마스크 없으면 마스크 없이 동작 (isLand가 true로 처리)
       setHasMask(false);
       console.warn("Auto mask load failed:", maskFile, e);
     }
   };
 
-  // 마스크 PNG 수동 Import 유지
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importMaskPNG = async (file: File) => {
     ensureMaskCanvas();
@@ -465,10 +476,9 @@ export default function Page() {
   };
 
   const onCanvasMouseMove = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
-    const p = getCanvasPoint(evt);
-    setMouseCanvas(p);
-
     if (!editMask || !drawingRef.current) return;
+    const p = getCanvasPoint(evt);
+
     const last = lastPtRef.current;
     if (!last) {
       lastPtRef.current = p;
@@ -512,6 +522,23 @@ export default function Page() {
     setStep(0);
   };
 
+  // ✅ 초기화 단축키: ` (Backquote)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === "Backquote") {
+        e.preventDefault();
+        onReset();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 맵 바뀔 때: 지도 로드 + 마스크 자동 적용
   useEffect(() => {
     let cancelled = false;
@@ -532,7 +559,7 @@ export default function Page() {
     img.onerror = () => {
       if (cancelled) return;
       setImgError(
-        `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인하시오.`
+        `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
       );
       imgRef.current = null;
       redraw();
@@ -540,7 +567,6 @@ export default function Page() {
 
     onReset();
 
-    // show/edit는 끄고, hasMask는 자동 적용 결과로 결정
     setShowMask(false);
     setEditMask(false);
 
@@ -552,7 +578,6 @@ export default function Page() {
     return () => {
       cancelled = true;
     };
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInfo.file, mapId]);
 
@@ -560,16 +585,6 @@ export default function Page() {
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask]);
-
-  const hudText = useMemo(() => {
-    if (!mouseCanvas) return null;
-    const grid = toGridLabel(mouseCanvas, mapInfo.sizeKm, CANVAS);
-    const mx = Math.round(mouseCanvas.x * metersPerPixel);
-    const my = Math.round(mouseCanvas.y * metersPerPixel);
-    return { grid, mx, my };
-  }, [mouseCanvas, mapInfo.sizeKm, metersPerPixel]);
-
-  
 
   // Ctrl+M → ( , / . / V )
   const maskChordRef = useRef<{ armed: boolean; expires: number }>({ armed: false, expires: 0 });
@@ -579,12 +594,6 @@ export default function Page() {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === "Backquote") {
-  e.preventDefault();
-  onReset();
-  return;
-}
 
       const key = e.key;
       const lower = key.toLowerCase();
@@ -636,7 +645,7 @@ export default function Page() {
     <div className="pubg-shell">
       <header className="pubg-topbar">
         <div className="pubg-tabs">
-          <div className="pubg-tab">배틀그라운드 낙하산 도우미</div>
+          <div className="pubg-tab">배그 낙하산 도우미</div>
         </div>
       </header>
 
@@ -646,8 +655,6 @@ export default function Page() {
 
       <div className="pubg-body">
         <aside className="pubg-side">
-          <div className="pubg-side-title"></div>
-
           <div className="pubg-field">
             <span className="pubg-label">맵 선택</span>
             <select className="pubg-select" value={mapId} onChange={(e) => setMapId(e.target.value as MapId)}>
@@ -677,21 +684,21 @@ export default function Page() {
           </div>
 
           <button className="pubg-primary" onClick={onReset}>
-            초기화( 단축키: ~ )
+            초기화
           </button>
 
           <div
-  style={{
-    marginTop: 10,
-    fontSize: 12,
-    lineHeight: 1.5,
-    color: "rgba(255,255,255,0.7)",
-    whiteSpace: "pre-line",
-  }}
->
-  {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요
- `}
-</div>
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "rgba(255,255,255,0.7)",
+              whiteSpace: "pre-line",
+            }}
+          >
+            {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요.
+초기화 단축키는 \` 입니다.`}
+          </div>
 
           {imgError && (
             <div style={{ marginTop: 12, whiteSpace: "pre-wrap", color: "#ff6b6b", fontSize: 12 }}>
@@ -703,14 +710,36 @@ export default function Page() {
         <main className="pubg-main">
           <div
             ref={fsRef}
+            className="pubg-fs-host"
             style={{
               width: isFullscreen ? "100vw" : "auto",
               height: isFullscreen ? "100vh" : "auto",
               display: "grid",
               placeItems: "center",
-              background: isFullscreen ? "rgba(0,0,0,0.35)" : "transparent",
+              position: "relative",
+              overflow: "hidden",
+              background: isFullscreen ? "black" : "transparent",
+              margin: 0,
+              padding: 0,
             }}
           >
+            {/* ✅ 인게임 느낌: 맵 블러 배경 */}
+            {isFullscreen && (
+              <div
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: `url(${mapInfo.file})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  filter: "blur(18px) brightness(0.6)",
+                  transform: "scale(1.08)",
+                  pointerEvents: "none",
+                }}
+              />
+            )}
+
             <div
               className="pubg-map-frame"
               style={
@@ -718,9 +747,12 @@ export default function Page() {
                   ? {
                       width: displaySize,
                       height: displaySize,
-                      aspectRatio: "auto",
                       borderRadius: 0,
                       border: "none",
+                      position: "relative",
+                      zIndex: 1,
+                      boxSizing: "border-box",
+                      padding: 0,
                     }
                   : undefined
               }
@@ -734,24 +766,13 @@ export default function Page() {
                 onMouseDown={onCanvasMouseDown}
                 onMouseMove={onCanvasMouseMove}
                 onMouseUp={onCanvasMouseUp}
-                onMouseLeave={() => {
-                  onCanvasMouseUp();
-                  setMouseCanvas(null);
-                }}
-                style={isFullscreen ? { width: displaySize, height: displaySize } : undefined}
+                onMouseLeave={onCanvasMouseUp}
+                style={isFullscreen ? { width: "100%", height: "100%", display: "block", imageRendering: "auto" as any } : undefined}
               />
 
-          
-
               <div className="pubg-right-note">
-                
-            
                 전체화면 후 낙하 지점에 커서를 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
-                
-              
               </div>
-
-              
 
               <input
                 ref={importInputRef}
