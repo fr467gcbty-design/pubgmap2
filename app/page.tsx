@@ -271,21 +271,9 @@ export default function Page() {
 
   // ✅ 맵별 보정값 저장/불러오기
   useEffect(() => {
-    const key = `calib:${mapId}`;
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved) setCalib(JSON.parse(saved));
-      else setCalib(DEFAULT_CALIB);
-    } catch {
-      setCalib(DEFAULT_CALIB);
-    }
-  }, [mapId]);
+  setCalib(getPreset(mapId));
+}, [mapId]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`calib:${mapId}`, JSON.stringify(calib));
-    } catch {}
-  }, [calib, mapId]);
 
   // ✅ Ctrl+K → 보정 패널 토글
   useEffect(() => {
