@@ -217,9 +217,9 @@ type Calib = { s: number; dx: number; dy: number };
 const DEFAULT_CALIB: Calib = { s: 1, dx: 0, dy: 0 };
 
 const CALIB_PRESETS: Partial<Record<MapId, Calib>> = {
-  sanhok: { s: 1, dx: 4, dy: 5 },
-  // erangel: { s: 1.000, dx: 0, dy: 0 },
-  // miramar: { s: 1.000, dx: 0, dy: 0 },
+  sanhok: { s: 1.000, dx: 4, dy: 4   },
+  erangel: { s: 1.000, dx: 1, dy: 1 },
+  miramar: { s: 1.000, dx: -1, dy: 0 },
 };
 
 const getPreset = (id: MapId): Calib => CALIB_PRESETS[id] ?? DEFAULT_CALIB;
