@@ -217,8 +217,10 @@ type Calib = { s: number; dx: number; dy: number };
 const DEFAULT_CALIB: Calib = { s: 1, dx: 0, dy: 0 };
 
 /** ✅ 배포용(고정) 프리셋: 여기 값 넣으면 모든 사용자에게 동일 적용 */
-const CALIB_PRESETS: Partial<Record<MapId, Calib>> = {
-  // 예시) sanhok: { s: 1.023, dx: -6, dy: 4 },
+const CALIB_PRESETS: Partial<Record<MapId, Calib>> = { 
+sanhok: { s: 1.000, dx: 4, dy: 4   },
+erangel: { s: 1.000, dx: 1, dy: 1 },
+miramar: { s: 1.000, dx: -1, dy: 0 },
 };
 
 const getPreset = (id: MapId): Calib => CALIB_PRESETS[id] ?? DEFAULT_CALIB;
@@ -985,3 +987,5 @@ export default function Page() {
     </div>
   );
 }
+
+
