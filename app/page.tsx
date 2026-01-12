@@ -801,7 +801,7 @@ export default function Page() {
             <br />
             {editMask ? <>마스크 편집 중 (Shift+드래그=지우기)</> : <></>}
             <br />
-            {ENABLE_CALIB_UI ? <span style={{ opacity: 0.8 }}>지도 보정 패널: Ctrl+K</span> : null}
+            {ENABLE_CALIB_UI ? <span style={{ opacity: 0.8 }}></span> : null}
           </div>
 
           <button className="pubg-primary" onClick={onReset}>
@@ -818,8 +818,8 @@ export default function Page() {
             }}
           >
             {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요.
-초기화 단축키는 \` 입니다.
-마스크 단축키: Ctrl+M 후 ,(보기) / .(편집) / V(불러오기)`}
+초기화 단축키는 \` 입니다.`
+}
           </div>
 
           {imgError && (
