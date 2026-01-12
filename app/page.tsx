@@ -164,7 +164,6 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, color 
   ctx.restore();
 }
 
-// 이미지 로더 (자동 마스크 적용용)
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
@@ -174,7 +173,6 @@ function loadImage(src: string) {
   });
 }
 
-// 마스크 알파가 실제로 있는지 검증
 function isValidAlphaMask(data: Uint8ClampedArray) {
   let minA = 255,
     maxA = 0;
@@ -200,9 +198,10 @@ const MAPS = [
 ] as const;
 
 type MapId = (typeof MAPS)[number]["id"];
-
 const RADIUS_OPTIONS_M: number[] = Array.from({ length: 25 }, (_, i) => (i + 1) * 50);
 
+/** 마스크는 “월드 좌표(보정 전)” 기준으로 저장되어 있고,
+ *  start/end/target도 월드 좌표로 저장하므로 여기 샘플링은 월드 좌표 그대로 사용 */
 function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: boolean, W: number, H: number) {
   return (p: Point): boolean => {
     if (!maskCtx || !hasMask) return true;
@@ -213,36 +212,41 @@ function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: b
   };
 }
 
+/** ✅ 보정값 타입 */
 type Calib = { s: number; dx: number; dy: number };
 const DEFAULT_CALIB: Calib = { s: 1, dx: 0, dy: 0 };
 
+/** ✅ 배포용(고정) 프리셋: 여기 값 넣으면 모든 사용자에게 동일 적용 */
 const CALIB_PRESETS: Partial<Record<MapId, Calib>> = {
-  sanhok: { s: 1.000, dx: 4, dy: 4   },
-  erangel: { s: 1.000, dx: 1, dy: 1 },
-  miramar: { s: 1.000, dx: -1, dy: 0 },
+  // 예시) sanhok: { s: 1.023, dx: -6, dy: 4 },
 };
 
 const getPreset = (id: MapId): Calib => CALIB_PRESETS[id] ?? DEFAULT_CALIB;
 
+/** ✅ 개발 중에는 슬라이더로 맞추고 localStorage에 저장하도록 (원하면 true 유지) */
+const ENABLE_CALIB_UI = true; // 배포에서 완전히 숨기고 싶으면 false
+const USE_LOCAL_STORAGE_CALIB = true; // 배포에서 “고정값만” 쓰려면 false
+
 export default function Page() {
   const CANVAS = 900;
-
-  // ✅ 전체화면에서 정사각형 한 변 = min(vw, vh)
   const FS_SAFE_PAD = 0;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const [imgTick, setImgTick] = useState(0); // ✅ 이미지 로드/교체를 React가 알게 해주는 트리거
 
   const fsRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // ✅ 브라우저/해상도 대응용 viewport (visualViewport 우선)
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const viewportSyncRef = useRef<() => void>(() => {});
 
-  // ✅ 보정(캘리브레이션)
+  // ✅ mapId 먼저
+  const [mapId, setMapId] = useState<MapId>("sanhok");
+
+  // ✅ calib 초기값을 “처음부터 프리셋”으로 (초기 1프레임 어긋남 방지)
+  const [calib, setCalib] = useState<Calib>(() => getPreset("sanhok"));
   const [calibMode, setCalibMode] = useState(false);
-  const [calib, setCalib] = useState<Calib>(DEFAULT_CALIB);
 
   // 마스크
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -260,23 +264,39 @@ export default function Page() {
   const [end, setEnd] = useState<Point | null>(null);
   const [target, setTarget] = useState<Point | null>(null);
 
-  const [mapId, setMapId] = useState<MapId>("sanhok");
   const [imgError, setImgError] = useState<string | null>(null);
   const [radiusM, setRadiusM] = useState<number>(700);
 
   const mapInfo = useMemo(() => MAPS.find((m) => m.id === mapId)!, [mapId]);
-
   const metersPerPixel = useMemo(() => (mapInfo.sizeKm * 1000) / CANVAS, [mapInfo.sizeKm]);
   const radiusPx = useMemo(() => radiusM / metersPerPixel, [radiusM, metersPerPixel]);
 
-  // ✅ 맵별 보정값 저장/불러오기
+  /** ✅ 맵 바뀔 때 보정값 적용: (1) localStorage 우선(옵션) → (2) preset */
   useEffect(() => {
-  setCalib(getPreset(mapId));
-}, [mapId]);
+    if (USE_LOCAL_STORAGE_CALIB) {
+      try {
+        const saved = localStorage.getItem(`calib:${mapId}`);
+        if (saved) {
+          setCalib(JSON.parse(saved));
+          return;
+        }
+      } catch {}
+    }
+    setCalib(getPreset(mapId));
+  }, [mapId]);
 
-
-  // ✅ Ctrl+K → 보정 패널 토글
+  /** ✅ 보정값 저장(옵션) */
   useEffect(() => {
+    if (!USE_LOCAL_STORAGE_CALIB) return;
+    try {
+      localStorage.setItem(`calib:${mapId}`, JSON.stringify(calib));
+    } catch {}
+  }, [calib, mapId]);
+
+  /** ✅ Ctrl+K 보정 패널 토글 */
+  useEffect(() => {
+    if (!ENABLE_CALIB_UI) return;
+
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
@@ -290,24 +310,23 @@ export default function Page() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // ✅ 보정 행렬(렌더용) 계산
+  /** ✅ 보정 행렬(렌더용) */
   const getCalibTransform = () => {
     const { s, dx, dy } = calib;
     const cx = CANVAS / 2;
     const cy = CANVAS / 2;
-    // center 기준 스케일 + 이동
     const tx = (1 - s) * cx + dx;
     const ty = (1 - s) * cy + dy;
     return { s, tx, ty };
   };
 
-  // ✅ 화면좌표(display: 0..CANVAS) -> 월드좌표(world: 보정 전 기준)
+  /** ✅ 화면좌표(display 0..CANVAS) -> 월드좌표(world) */
   const toWorld = (pDisplay: Point): Point => {
     const { s, tx, ty } = getCalibTransform();
     return { x: (pDisplay.x - tx) / s, y: (pDisplay.y - ty) / s };
   };
 
-  // ✅ 보정 적용해서 이미지/오버레이 그리기
+  /** ✅ 보정 적용해서 이미지/오버레이 그리기 */
   const drawWithCalib = (ctx: CanvasRenderingContext2D, source: CanvasImageSource) => {
     const { s, tx, ty } = getCalibTransform();
 
@@ -335,7 +354,7 @@ export default function Page() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 
-  // ✅ viewport 동기화 (fullscreen 전환 직후 타이밍 이슈까지 대응)
+  /** ✅ viewport sync */
   useEffect(() => {
     const syncViewport = () => {
       const vv = window.visualViewport;
@@ -385,13 +404,14 @@ export default function Page() {
     }
   };
 
-  // ✅ 전체화면 맵 표시 크기
+  /** ✅ fullscreen display size */
   const displaySize = useMemo(() => {
     if (!isFullscreen) return CANVAS;
     const size = Math.min(viewport.w, viewport.h) - FS_SAFE_PAD * 2;
     return Math.max(200, Math.floor(size));
   }, [isFullscreen, viewport.w, viewport.h]);
 
+  /** ✅ mask setup */
   const ensureMaskCanvas = () => {
     if (!maskCanvasRef.current || !maskCtxRef.current) {
       const mc = document.createElement("canvas");
@@ -416,7 +436,6 @@ export default function Page() {
     try {
       const img = await loadImage(maskFile);
       mctx.clearRect(0, 0, CANVAS, CANVAS);
-      // 마스크는 "월드 좌표(보정 전)" 기준으로 저장됨
       mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
 
       const data = mctx.getImageData(0, 0, CANVAS, CANVAS).data;
@@ -440,7 +459,6 @@ export default function Page() {
     const img = new Image();
     img.onload = () => {
       mctx.clearRect(0, 0, CANVAS, CANVAS);
-      // 마스크는 월드 좌표 기준으로 저장
       mctx.drawImage(img, 0, 0, CANVAS, CANVAS);
       URL.revokeObjectURL(url);
       setHasMask(true);
@@ -476,6 +494,7 @@ export default function Page() {
     if (!hasMask) setHasMask(true);
   };
 
+  /** ✅ 캔버스 그리기 */
   const redraw = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -486,15 +505,12 @@ export default function Page() {
     ctx.clearRect(0, 0, CANVAS, CANVAS);
 
     const img = imgRef.current;
-    if (img) {
-      // ✅ 지도 이미지는 보정 적용해서 그리기
-      drawWithCalib(ctx, img);
-    } else {
+    if (img) drawWithCalib(ctx, img);
+    else {
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, CANVAS, CANVAS);
     }
 
-    // ✅ 마스크 오버레이도 동일 보정으로 보이게
     if (showMask && hasMask && maskCanvasRef.current) {
       ctx.save();
       ctx.globalAlpha = editMask ? 0.35 : 0.22;
@@ -502,14 +518,12 @@ export default function Page() {
       ctx.restore();
     }
 
-    // ✅ 계산은 "월드 좌표(보정 전)"로 진행
     let drop: PointT | null = null;
     if (start && end && target) {
       const isLand = makeIsLandFromMask(maskCtxRef.current, hasMask, CANVAS, CANVAS);
       drop = earliestLandPointWithinCircle(start, end, target, radiusPx, isLand);
     }
 
-    // ✅ 오버레이(선/원/화살표/점)도 보정 적용해서 지도 위에 정확히 올라가게
     withCalibTransform(ctx, () => {
       if (start && end) {
         ctx.strokeStyle = "rgba(255,255,255,0.6)";
@@ -548,7 +562,13 @@ export default function Page() {
     });
   };
 
-  // ✅ 클릭/드래그는 "보정된 화면좌표" -> "월드좌표"로 역변환해서 저장
+  /** ✅ (중요) calib 포함해서 상태 바뀌면 즉시 redraw */
+  useEffect(() => {
+    redraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask, calib, imgTick]);
+
+  /** ✅ 클릭/드래그는 “월드좌표”로 저장 */
   const getCanvasPointWorld = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Point => {
     const rect = evt.currentTarget.getBoundingClientRect();
     const xDisplay = ((evt.clientX - rect.left) / rect.width) * CANVAS;
@@ -615,7 +635,7 @@ export default function Page() {
     setStep(0);
   };
 
-  // ✅ 초기화 단축키: ` (Backquote)
+  /** ✅ ` 단축키 초기화 */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -632,7 +652,7 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 맵 바뀔 때: 지도 로드 + 마스크 자동 적용
+  /** ✅ 맵 변경 시 지도 로드 + 마스크 적용 */
   useEffect(() => {
     let cancelled = false;
 
@@ -643,11 +663,20 @@ export default function Page() {
     const img = new Image();
     img.src = mapInfo.file;
 
-    img.onload = () => {
-      if (cancelled) return;
-      imgRef.current = img;
-      redraw();
-    };
+   img.onload = async () => {
+  if (cancelled) return;
+
+  // decode()가 지원되면 디코딩까지 끝난 후 그리기 (첫 프레임 찢김/지연 방지)
+  try {
+    // @ts-ignore
+    if (img.decode) await img.decode();
+  } catch {}
+
+  imgRef.current = img;
+
+  // ✅ ref 변경만으로는 redraw 이펙트가 안 돌기 때문에 state를 한번 건드려서 트리거
+  setImgTick((t) => t + 1);
+};
 
     img.onerror = () => {
       if (cancelled) return;
@@ -655,6 +684,7 @@ export default function Page() {
         `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
       );
       imgRef.current = null;
+      setImgTick((t) => t + 1); // (선택) 로딩 중 화면 갱신
       redraw();
     };
 
@@ -673,13 +703,7 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInfo.file, mapId]);
 
-  // 상태 바뀔 때 redraw
-  useEffect(() => {
-    redraw();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask, calib]);
-
-  // Ctrl+M → ( , / . / V )
+  /** ✅ Ctrl+M → ( , / . / V ) */
   const maskChordRef = useRef<{ armed: boolean; expires: number }>({ armed: false, expires: 0 });
   useEffect(() => {
     const ARM_MS = 1500;
@@ -775,7 +799,7 @@ export default function Page() {
             <br />
             {editMask ? <>마스크 편집 중 (Shift+드래그=지우기)</> : <></>}
             <br />
-            <span style={{ opacity: 0.8 }}>지도 보정 패널: Ctrl+K</span>
+            {ENABLE_CALIB_UI ? <span style={{ opacity: 0.8 }}>지도 보정 패널: Ctrl+K</span> : null}
           </div>
 
           <button className="pubg-primary" onClick={onReset}>
@@ -819,7 +843,6 @@ export default function Page() {
               padding: 0,
             }}
           >
-            {/* ✅ 인게임 느낌: 맵 블러 배경 */}
             {isFullscreen && (
               <div
                 aria-hidden
@@ -882,8 +905,8 @@ export default function Page() {
                 }}
               />
 
-              {/* ✅ 보정 패널 (Ctrl+K) */}
-              {calibMode && (
+              {/* ✅ 보정 패널 */}
+              {ENABLE_CALIB_UI && calibMode && (
                 <div
                   style={{
                     position: "fixed",
@@ -901,7 +924,7 @@ export default function Page() {
                 >
                   <div style={{ fontWeight: 900, marginBottom: 6 }}>지도 보정 (Ctrl+K)</div>
                   <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 8 }}>
-                    팁: 먼저 <b>Scale</b> 맞추고, 그 다음 <b>dx/dy</b>로 위치를 맞추면 쉬움
+                    팁: 먼저 <b>Scale</b> 맞추고, 그 다음 <b>dx/dy</b>로 위치 조정
                   </div>
 
                   <div style={{ fontSize: 12, opacity: 0.8 }}>Scale: {calib.s.toFixed(3)}</div>
@@ -938,7 +961,7 @@ export default function Page() {
                   />
 
                   <button
-                    onClick={() => setCalib(DEFAULT_CALIB)}
+                    onClick={() => setCalib(getPreset(mapId))}
                     style={{
                       marginTop: 10,
                       width: "100%",
@@ -951,7 +974,7 @@ export default function Page() {
                       cursor: "pointer",
                     }}
                   >
-                    보정값 초기화
+                    (프리셋으로) 초기화
                   </button>
                 </div>
               )}

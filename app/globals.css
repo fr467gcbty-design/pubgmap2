@@ -126,13 +126,6 @@ body::after{
   backdrop-filter: blur(10px);
 }
 
-.pubg-side-title{
-  margin: 0 0 14px 0;
-  font-size: 14px;
-  color: var(--muted);
-  font-weight: 900;
-}
-
 .pubg-field{ margin-bottom: 14px; }
 .pubg-label{
   font-size: 12px;
@@ -141,7 +134,6 @@ body::after{
   display: block;
 }
 
-/* ✅ select styling + 옵션 글자 보이게 */
 .pubg-select{
   width: 100%;
   height: 44px;
@@ -202,21 +194,6 @@ body::after{
   user-select: none;
 }
 
-.pubg-hud{
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 20;
-  padding: 8px 10px;
-  background: rgba(0,0,0,0.55);
-  color: white;
-  font-size: 14px;
-  border-radius: 8px;
-  user-select: none;
-  display: flex;
-  gap: 10px;
-}
-
 /* fullscreen toggle button */
 .pubg-fs-btn{
   position: fixed;
@@ -239,7 +216,7 @@ body::after{
   background: rgba(0,0,0,0.65);
 }
 
-/* ✅ 우측 흰색 안내 문구 */
+/* ✅ 우측 안내 문구 */
 .pubg-right-note{
   position: fixed;
   right: 16px;
