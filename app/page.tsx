@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import HowToPanel from "./components/HowToPanel";
 
 type Point = { x: number; y: number };
 type PointT = { x: number; y: number; t: number };
@@ -200,8 +201,6 @@ const MAPS = [
 type MapId = (typeof MAPS)[number]["id"];
 const RADIUS_OPTIONS_M: number[] = Array.from({ length: 25 }, (_, i) => (i + 1) * 50);
 
-/** 마스크는 “월드 좌표(보정 전)” 기준으로 저장되어 있고,
- *  start/end/target도 월드 좌표로 저장하므로 여기 샘플링은 월드 좌표 그대로 사용 */
 function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: boolean, W: number, H: number) {
   return (p: Point): boolean => {
     if (!maskCtx || !hasMask) return true;
@@ -212,22 +211,25 @@ function makeIsLandFromMask(maskCtx: CanvasRenderingContext2D | null, hasMask: b
   };
 }
 
-/** ✅ 보정값 타입 */
 type Calib = { s: number; dx: number; dy: number };
 const DEFAULT_CALIB: Calib = { s: 1, dx: 0, dy: 0 };
 
-/** ✅ 배포용(고정) 프리셋: 여기 값 넣으면 모든 사용자에게 동일 적용 */
-const CALIB_PRESETS: Partial<Record<MapId, Calib>> = { 
-sanhok: { s: 1.000, dx: 4, dy: 4   },
-erangel: { s: 1.000, dx: 1, dy: 1 },
-miramar: { s: 1.000, dx: -1, dy: 0 },
+const CALIB_PRESETS: Partial<Record<MapId, Calib>> = {
+  sanhok: { s: 1.0, dx: 4, dy: 4 },
+  erangel: { s: 1.0, dx: 1, dy: 1 },
+  miramar: { s: 1.0, dx: -1, dy: 0 },
 };
 
 const getPreset = (id: MapId): Calib => CALIB_PRESETS[id] ?? DEFAULT_CALIB;
 
-/** ✅ 개발 중에는 슬라이더로 맞추고 localStorage에 저장하도록 (원하면 true 유지) */
-const ENABLE_CALIB_UI = true; // 배포에서 완전히 숨기고 싶으면 false
-const USE_LOCAL_STORAGE_CALIB = true; // 배포에서 “고정값만” 쓰려면 false
+const ENABLE_CALIB_UI = true;
+const USE_LOCAL_STORAGE_CALIB = true;
+
+const HELPBOX_CREDIT = {
+  href: "https://www.flaticon.com/kr/free-icons/",
+  title: "낙하산 아이콘",
+  text: "icons made by Freepik from Flaticon~",
+};
 
 export default function Page() {
   const CANVAS = 900;
@@ -235,7 +237,7 @@ export default function Page() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const [imgTick, setImgTick] = useState(0); // ✅ 이미지 로드/교체를 React가 알게 해주는 트리거
+  const [imgTick, setImgTick] = useState(0);
 
   const fsRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -243,12 +245,15 @@ export default function Page() {
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const viewportSyncRef = useRef<() => void>(() => {});
 
-  // ✅ mapId 먼저
   const [mapId, setMapId] = useState<MapId>("sanhok");
-
-  // ✅ calib 초기값을 “처음부터 프리셋”으로 (초기 1프레임 어긋남 방지)
   const [calib, setCalib] = useState<Calib>(() => getPreset("sanhok"));
   const [calibMode, setCalibMode] = useState(false);
+
+  // ✅ 사용법 슬라이드 패널 상태
+  const [howtoOpen, setHowtoOpen] = useState(false);
+
+  // ✅ ? 버튼 네모 도움말 창 상태 (추가)
+  const [helpBoxOpen, setHelpBoxOpen] = useState(false);
 
   // 마스크
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -273,7 +278,16 @@ export default function Page() {
   const metersPerPixel = useMemo(() => (mapInfo.sizeKm * 1000) / CANVAS, [mapInfo.sizeKm]);
   const radiusPx = useMemo(() => radiusM / metersPerPixel, [radiusM, metersPerPixel]);
 
-  /** ✅ 맵 바뀔 때 보정값 적용: (1) localStorage 우선(옵션) → (2) preset */
+  /** ✅ ? 도움말 열려있을 때 ESC로 닫기 (추가) */
+  useEffect(() => {
+    if (!helpBoxOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHelpBoxOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [helpBoxOpen]);
+
   useEffect(() => {
     if (USE_LOCAL_STORAGE_CALIB) {
       try {
@@ -287,7 +301,6 @@ export default function Page() {
     setCalib(getPreset(mapId));
   }, [mapId]);
 
-  /** ✅ 보정값 저장(옵션) */
   useEffect(() => {
     if (!USE_LOCAL_STORAGE_CALIB) return;
     try {
@@ -295,7 +308,6 @@ export default function Page() {
     } catch {}
   }, [calib, mapId]);
 
-  /** ✅ Ctrl+K 보정 패널 토글 */
   useEffect(() => {
     if (!ENABLE_CALIB_UI) return;
 
@@ -312,7 +324,6 @@ export default function Page() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  /** ✅ 보정 행렬(렌더용) */
   const getCalibTransform = () => {
     const { s, dx, dy } = calib;
     const cx = CANVAS / 2;
@@ -322,13 +333,11 @@ export default function Page() {
     return { s, tx, ty };
   };
 
-  /** ✅ 화면좌표(display 0..CANVAS) -> 월드좌표(world) */
   const toWorld = (pDisplay: Point): Point => {
     const { s, tx, ty } = getCalibTransform();
     return { x: (pDisplay.x - tx) / s, y: (pDisplay.y - ty) / s };
   };
 
-  /** ✅ 보정 적용해서 이미지/오버레이 그리기 */
   const drawWithCalib = (ctx: CanvasRenderingContext2D, source: CanvasImageSource) => {
     const { s, tx, ty } = getCalibTransform();
 
@@ -356,7 +365,6 @@ export default function Page() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 
-  /** ✅ viewport sync */
   useEffect(() => {
     const syncViewport = () => {
       const vv = window.visualViewport;
@@ -406,14 +414,12 @@ export default function Page() {
     }
   };
 
-  /** ✅ fullscreen display size */
   const displaySize = useMemo(() => {
     if (!isFullscreen) return CANVAS;
     const size = Math.min(viewport.w, viewport.h) - FS_SAFE_PAD * 2;
     return Math.max(200, Math.floor(size));
   }, [isFullscreen, viewport.w, viewport.h]);
 
-  /** ✅ mask setup */
   const ensureMaskCanvas = () => {
     if (!maskCanvasRef.current || !maskCtxRef.current) {
       const mc = document.createElement("canvas");
@@ -496,7 +502,6 @@ export default function Page() {
     if (!hasMask) setHasMask(true);
   };
 
-  /** ✅ 캔버스 그리기 */
   const redraw = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -564,13 +569,11 @@ export default function Page() {
     });
   };
 
-  /** ✅ (중요) calib 포함해서 상태 바뀌면 즉시 redraw */
   useEffect(() => {
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, end, target, mapId, radiusPx, showMask, editMask, hasMask, calib, imgTick]);
 
-  /** ✅ 클릭/드래그는 “월드좌표”로 저장 */
   const getCanvasPointWorld = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Point => {
     const rect = evt.currentTarget.getBoundingClientRect();
     const xDisplay = ((evt.clientX - rect.left) / rect.width) * CANVAS;
@@ -611,6 +614,9 @@ export default function Page() {
   };
 
   const onCanvasClick = (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
+    // ✅ 도움말 창 열려 있으면 캔버스 클릭으로 좌표 찍히지 않게 막기 (추가)
+    if (helpBoxOpen) return;
+
     if (editMask) return;
     const p = getCanvasPointWorld(evt);
 
@@ -637,7 +643,6 @@ export default function Page() {
     setStep(0);
   };
 
-  /** ✅ ` 단축키 초기화 */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -654,31 +659,29 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** ✅ 맵 변경 시 지도 로드 + 마스크 적용 */
   useEffect(() => {
     let cancelled = false;
 
     ensureMaskCanvas();
     setImgError(null);
+
     imgRef.current = null;
+    setImgTick((t) => t + 1);
 
     const img = new Image();
     img.src = mapInfo.file;
 
-   img.onload = async () => {
-  if (cancelled) return;
+    img.onload = async () => {
+      if (cancelled) return;
 
-  // decode()가 지원되면 디코딩까지 끝난 후 그리기 (첫 프레임 찢김/지연 방지)
-  try {
-    // @ts-ignore
-    if (img.decode) await img.decode();
-  } catch {}
+      try {
+        // @ts-ignore
+        if (img.decode) await img.decode();
+      } catch {}
 
-  imgRef.current = img;
-
-  // ✅ ref 변경만으로는 redraw 이펙트가 안 돌기 때문에 state를 한번 건드려서 트리거
-  setImgTick((t) => t + 1);
-};
+      imgRef.current = img;
+      setImgTick((t) => t + 1);
+    };
 
     img.onerror = () => {
       if (cancelled) return;
@@ -686,7 +689,7 @@ export default function Page() {
         `지도 이미지를 불러오지 못했어요: ${mapInfo.file}\npublic/maps 폴더에 파일이 있는지, 파일명이 정확한지 확인해줘.`
       );
       imgRef.current = null;
-      setImgTick((t) => t + 1); // (선택) 로딩 중 화면 갱신
+      setImgTick((t) => t + 1);
       redraw();
     };
 
@@ -705,7 +708,6 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapInfo.file, mapId]);
 
-  /** ✅ Ctrl+M → ( , / . / V ) */
   const maskChordRef = useRef<{ armed: boolean; expires: number }>({ armed: false, expires: 0 });
   useEffect(() => {
     const ARM_MS = 1500;
@@ -762,15 +764,25 @@ export default function Page() {
 
   return (
     <div className="pubg-shell">
-      <header className="pubg-topbar">
-        <div className="pubg-tabs">
-          <div className="pubg-tab">배그 낙하산 도우미</div>
+      <header className="pubg-topbar pubg-topbar-grid">
+        <div className="pubg-topbar-left">
+          <div className="pubg-tabs">
+            <div className="pubg-tab">배그 낙하산 도우미</div>
+          </div>
+        </div>
+
+        <div className="pubg-topbar-center">
+          <button className="pubg-howto-btn" onClick={() => setHowtoOpen(true)} type="button">
+            사용법
+          </button>
+        </div>
+
+        <div className="pubg-topbar-right">
+          <button className="pubg-fs-btn" onClick={isFullscreen ? exitFullscreen : enterFullscreen} type="button">
+            {isFullscreen ? "전체화면 종료" : "전체화면"}
+          </button>
         </div>
       </header>
-
-      <button className="pubg-fs-btn" onClick={isFullscreen ? exitFullscreen : enterFullscreen}>
-        {isFullscreen ? "전체화면 종료" : "전체화면"}
-      </button>
 
       <div className="pubg-body">
         <aside className="pubg-side">
@@ -801,10 +813,9 @@ export default function Page() {
             <br />
             {editMask ? <>마스크 편집 중 (Shift+드래그=지우기)</> : <></>}
             <br />
-            {ENABLE_CALIB_UI ? <span style={{ opacity: 0.8 }}></span> : null}
           </div>
 
-          <button className="pubg-primary" onClick={onReset}>
+          <button className="pubg-primary" onClick={onReset} type="button">
             초기화
           </button>
 
@@ -818,14 +829,11 @@ export default function Page() {
             }}
           >
             {`※ 지도에 비행기 시작점과 끝점을 찍어 비행기 경로를 표시한 후, 도착지점을 찍어 낙하지점을 확인하세요.
-초기화 단축키는 \` 입니다.`
-}
+초기화 단축키는 \` 입니다.`}
           </div>
 
           {imgError && (
-            <div style={{ marginTop: 12, whiteSpace: "pre-wrap", color: "#ff6b6b", fontSize: 12 }}>
-              {imgError}
-            </div>
+            <div style={{ marginTop: 12, whiteSpace: "pre-wrap", color: "#ff6b6b", fontSize: 12 }}>{imgError}</div>
           )}
         </aside>
 
@@ -891,9 +899,56 @@ export default function Page() {
                 style={isFullscreen ? { width: "100%", height: "100%", display: "block" } : undefined}
               />
 
-              <div className="pubg-right-note">
-                전체화면 후 낙하 지점에 커서를 올리고 배틀그라운드 창을 켜면 동일한 지점을 찍을 수 있습니다.
-              </div>
+              {/* ✅ (추가) 오른쪽 아래 구석 작은 ? 버튼 */}
+              <button
+                className="pubg-help-fab"
+                type="button"
+                aria-label="도움말 열기"
+                onClick={() => setHelpBoxOpen(true)}
+              >
+                ?
+              </button>
+
+              {/* ✅ (추가) 네모 도움말 창 */}
+              {helpBoxOpen && (
+                <>
+                  {/* 바깥 클릭으로 닫기 + 캔버스 클릭 차단 */}
+                  <button
+                    className="pubg-helpbox-backdrop"
+                    type="button"
+                    aria-label="도움말 닫기"
+                    onClick={() => setHelpBoxOpen(false)}
+                  />
+
+                  <div className="pubg-helpbox" role="dialog" aria-label="">
+                    <div className="pubg-helpbox-head">
+                      <div className="pubg-helpbox-title"></div>
+                      <button
+                        className="pubg-helpbox-close"
+                        type="button"
+                        aria-label="닫기"
+                        onClick={() => setHelpBoxOpen(false)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="pubg-helpbox-body">
+                      <div style={{ fontWeight: 900, marginBottom: 8 }}></div>
+                      <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.5, opacity: 0.92 }}>
+                        # 배틀그라운드 낙하산  # 배틀그라운드 낙하산 젓가락 # 배틀그라운드 낙하산 최신 # 배그 낙하산 # 배그 낙하산 빨리내리기 #배그 낙하산 젓가락 
+                        # 배그 낙하산 최신
+                        
+                      </ul>
+                      <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                        
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="pubg-right-note"></div>
 
               <input
                 ref={importInputRef}
@@ -907,7 +962,6 @@ export default function Page() {
                 }}
               />
 
-              {/* ✅ 보정 패널 */}
               {ENABLE_CALIB_UI && calibMode && (
                 <div
                   style={{
@@ -975,17 +1029,18 @@ export default function Page() {
                       fontWeight: 900,
                       cursor: "pointer",
                     }}
+                    type="button"
                   >
                     (프리셋으로) 초기화
                   </button>
                 </div>
               )}
             </div>
+
+            <HowToPanel open={howtoOpen} onClose={() => setHowtoOpen(false)} />
           </div>
         </main>
       </div>
     </div>
   );
 }
-
-

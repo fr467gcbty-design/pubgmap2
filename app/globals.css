@@ -248,3 +248,437 @@ body::after{
     display: none;
   }
 }
+/* === Top Bar (상단 바) === */
+.pubg-topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.pubg-topbar-left {
+  justify-self: start;
+  font-weight: 700;
+}
+
+.pubg-topbar-center {
+  justify-self: center;
+}
+
+.pubg-topbar-right {
+  justify-self: end;
+}
+
+.pubg-howto-btn {
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* === HowTo Slide Panel === */
+.pubg-howto-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  background: rgba(0,0,0,0.35);
+}
+
+.pubg-howto-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pubg-howto-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(1000px, 100vw);
+  background: rgba(18, 18, 20, 0.98);
+  border-left: 1px solid rgba(255,255,255,0.12);
+  transform: translateX(102%);
+  transition: transform 220ms ease;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  box-shadow: -20px 0 60px rgba(0,0,0,0.45);
+}
+
+.pubg-howto-panel.is-open {
+  transform: translateX(0%);
+}
+
+.pubg-howto-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+
+.pubg-howto-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.pubg-icon-btn {
+  border: 0;
+  background: rgba(255,255,255,0.10);
+  color: #fff;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+/* carousel */
+.pubg-howto-carousel {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.pubg-howto-navbtn {
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.pubg-howto-viewport {
+  overflow: hidden;
+  border-radius: 18px;
+  min-height: 0;
+}
+
+.pubg-howto-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 220ms ease;
+}
+
+.pubg-howto-slide {
+  flex: 0 0 100%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.pubg-howto-card {
+  height: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pubg-howto-img {
+  height: min(280px, 34vh);
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  position: relative;
+}
+
+.pubg-howto-img-label {
+  font-weight: 800;
+  color: rgba(255,255,255,0.92);
+}
+
+.pubg-howto-img-sub {
+  position: absolute;
+  bottom: 12px;
+  font-size: 12px;
+  opacity: 0.75;
+  color: #fff;
+}
+
+.pubg-howto-card-text {
+  padding: 12px 12px 14px;
+  color: #fff;
+}
+
+.pubg-howto-card-title {
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.pubg-howto-card-desc {
+  opacity: 0.9;
+  line-height: 1.45;
+  font-size: 13px;
+}
+
+.pubg-howto-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.pubg-howto-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pubg-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+  background: rgba(255,255,255,0.22);
+}
+
+.pubg-dot.is-active {
+  background: rgba(255,255,255,0.90);
+}
+
+.pubg-howto-counter {
+  color: rgba(255,255,255,0.85);
+  font-size: 12px;
+}
+/* 챕터 버튼 줄 */
+.pubg-howto-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pubg-howto-chapter-btn {
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pubg-howto-video-wrap {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pubg-howto-video {
+  width: 100%;
+  height: min(56vh, 520px);
+  border-radius: 16px;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.pubg-howto-video-hint {
+  font-size: 12px;
+  opacity: 0.75;
+  color: #fff;
+}
+
+.pubg-howto-footer .pubg-howto-counter {
+  font-size: 12px;
+  opacity: 0.85;
+}
+/* 맵 하단 ? 버튼 (FAB) */
+.pubg-help-fab {
+  position: absolute;
+  left: 6px;   /* 하단 끝 위치: 왼쪽 */
+  bottom: 6px; /* 하단 끝 위치: 아래 */
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.45);
+  color: rgba(255,255,255,0.95);
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  z-index: 30; /* canvas 위로 */
+  backdrop-filter: blur(8px);
+}
+
+.pubg-help-fab:hover {
+  background: rgba(0,0,0,0.60);
+}
+
+.pubg-help-fab:focus-visible {
+  outline: 2px solid rgba(255,255,255,0.45);
+  outline-offset: 2px;
+}
+/* ✅ 도움말 창이 떠 있을 때 캔버스 클릭 막고 바깥 클릭 닫기 */
+.pubg-helpbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  z-index: 41;
+}
+
+/* ✅ 네모난 도움말 창 */
+.pubg-helpbox {
+  position: absolute;
+  left: 6px;
+  bottom: 40px; /* ? 버튼 위로 살짝 띄움 */
+  width: 260px;
+  height: 190px; /* 네모 느낌(원하면 220~260으로 키우기) */
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(20,20,22,0.92);
+  color: rgba(255,255,255,0.94);
+  z-index: 42;
+  box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pubg-helpbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+.pubg-helpbox-title {
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.pubg-helpbox-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(255,255,255,0.10);
+  color: #fff;
+  cursor: pointer;
+}
+
+.pubg-helpbox-body {
+  padding: 10px 12px 12px;
+  font-size: 13px;
+  flex: 1;
+  overflow: auto;
+}
+/* 사용법(영상) 오버레이 */
+.pubg-howto-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.pubg-howto-panel{
+  width: min(920px, calc(100vw - 24px));
+  height: min(640px, calc(100vh - 24px));
+  background: rgba(18,18,20,0.96);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pubg-howto-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+.pubg-howto-title{
+  font-weight: 900;
+  font-size: 14px;
+  color: rgba(255,255,255,0.95);
+}
+
+.pubg-icon-btn{
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.92);
+  cursor: pointer;
+}
+
+.pubg-howto-content{
+  padding: 14px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 영상 영역 */
+.pubg-howto-videoWrap{
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.35);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pubg-howto-video{
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain; /* 전체 화면에 영상 다 보이게 */
+  background: black;
+}
+
+/* 아래 설명 */
+.pubg-howto-desc{
+  border-top: 1px solid rgba(255,255,255,0.10);
+  padding-top: 10px;
+  color: rgba(255,255,255,0.9);
+}
+
+.pubg-howto-desc-title{
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.pubg-howto-list{
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  opacity: 0.92;
+}
+.pubg-howto-list li{ margin: 4px 0; }
