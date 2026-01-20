@@ -1,7 +1,9 @@
 "use client";
 
+import AdUnit from "./components/AdUnit";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import HowToPanel from "./components/HowToPanel";
+
 
 type Point = { x: number; y: number };
 type PointT = { x: number; y: number; t: number };
@@ -838,20 +840,27 @@ export default function Page() {
         </aside>
 
         <main className="pubg-main">
-          <div
-            ref={fsRef}
-            className="pubg-fs-host"
-            style={{
-              width: isFullscreen ? "100vw" : "auto",
-              height: isFullscreen ? "100vh" : "auto",
-              display: "grid",
-              placeItems: "center",
-              position: "relative",
-              overflow: "hidden",
-              background: isFullscreen ? "black" : "transparent",
-              margin: 0,
-              padding: 0,
-            }}
+  {/* ✅ 본문 상단 광고 (전체화면일 때는 숨김) */}
+  {!isFullscreen && (
+    <div style={{ width: "min(900px, 100%)", marginBottom: 12 }}>
+      <AdUnit />
+    </div>
+  )}
+
+  <div
+    ref={fsRef}
+    className="pubg-fs-host"
+    style={{
+      width: isFullscreen ? "100vw" : "auto",
+      height: isFullscreen ? "100vh" : "auto",
+      display: "grid",
+      placeItems: "center",
+      position: "relative",
+      overflow: "hidden",
+      background: isFullscreen ? "black" : "transparent",
+      margin: 0,
+      padding: 0,
+    }}
           >
             {isFullscreen && (
               <div
@@ -868,6 +877,7 @@ export default function Page() {
                 }}
               />
             )}
+            
 
             <div
               className="pubg-map-frame"
