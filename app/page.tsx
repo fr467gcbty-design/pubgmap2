@@ -1,6 +1,6 @@
 "use client";
 
-import AdUnit from "./components/AdUnit";
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import HowToPanel from "./components/HowToPanel";
 
@@ -841,11 +841,7 @@ export default function Page() {
 
         <main className="pubg-main">
   {/* ✅ 본문 상단 광고 (전체화면일 때는 숨김) */}
-  {!isFullscreen && (
-    <div style={{ width: "min(900px, 100%)", marginBottom: 12 }}>
-      <AdUnit />
-    </div>
-  )}
+  
 
   <div
     ref={fsRef}
